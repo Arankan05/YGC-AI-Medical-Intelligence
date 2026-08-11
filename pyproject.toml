@@ -1,0 +1,18 @@
+[tool.pyrefly]
+search-paths = [
+    "backend",
+    "backend/app",
+    "backend/venv/Lib/site-packages",
+    "C:/Users/LENOVO/AppData/Local/Programs/Python/Python314/Lib/site-packages"
+]
+
+[tool.pyright]
+include = ["backend"]
+venvPath = "backend"
+venv = "venv"
+extraPaths = [
+    "backend",
+    "backend/app",
+    "backend/venv/Lib/site-packages",
+    "C:/Users/LENOVO/AppData/Local/Programs/Python/Python314/Lib/site-packages"
+]

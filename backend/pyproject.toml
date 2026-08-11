@@ -1,0 +1,16 @@
+[tool.pyrefly]
+search-paths = [
+    ".",
+    "app",
+    "venv/Lib/site-packages",
+    "C:/Users/LENOVO/AppData/Local/Programs/Python/Python314/Lib/site-packages"
+]
+
+[tool.pyright]
+venv = "venv"
+extraPaths = [
+    ".",
+    "app",
+    "venv/Lib/site-packages",
+    "C:/Users/LENOVO/AppData/Local/Programs/Python/Python314/Lib/site-packages"
+]

@@ -1,5 +1,9 @@
-"""SQLAlchemy database models for MediGuardian AI."""
+"""
+Import Base and all SQLAlchemy models so that Alembic and metadata tools
+can automatically discover all model definitions on Base.metadata.
+"""
 
+from app.db.database import Base
 from app.models.user import User
 from app.models.patient import Patient
 from app.models.document import Document
@@ -15,6 +19,7 @@ from app.models.doctor_search import DoctorSearch
 from app.models.doctor_recommendation import DoctorRecommendation
 
 __all__ = [
+    "Base",
     "User",
     "Patient",
     "Document",
