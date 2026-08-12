@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api import api_router
 from app.db.database import get_db
 
 app = FastAPI(
@@ -12,6 +13,9 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+# Register API routers
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")
