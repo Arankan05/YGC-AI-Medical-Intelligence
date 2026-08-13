@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="150" height="150" viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="hero-art">
+<path id="Vector" d="M75 141C111.451 141 141 111.451 141 75C141 38.5492 111.451 9 75 9C38.5492 9 9 38.5492 9 75C9 111.451 38.5492 141 75 141Z" stroke="#C9C3F7" stroke-width="1.5"/>
+<path id="Vector_2" d="M75 123C101.51 123 123 101.51 123 75C123 48.4903 101.51 27 75 27C48.4903 27 27 48.4903 27 75C27 101.51 48.4903 123 75 123Z" stroke="#D9D4FA" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path id="Vector_3" d="M88 34H48C44.6863 34 42 36.6863 42 40V94C42 97.3137 44.6863 100 48 100H88C91.3137 100 94 97.3137 94 94V40C94 36.6863 91.3137 34 88 34Z" fill="white" stroke="#6544DC" stroke-width="1.6"/>
+<path id="Vector_4" d="M104 50H64C60.6863 50 58 52.6863 58 56V110C58 113.314 60.6863 116 64 116H104C107.314 116 110 113.314 110 110V56C110 52.6863 107.314 50 104 50Z" fill="white" stroke="#6544DC" stroke-width="1.6"/>
+<path id="Vector_5" d="M70 74H98M70 86H90M70 98H94" stroke="#8B74EE" stroke-width="2.4" stroke-linecap="round"/>
+<path id="Vector_6" d="M110 61C118.284 61 125 54.2843 125 46C125 37.7157 118.284 31 110 31C101.716 31 95 37.7157 95 46C95 54.2843 101.716 61 110 61Z" fill="#4A4F63"/>
+<path id="Vector_7" d="M104 46L108.5 50.5L117 42" stroke="white" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>
