@@ -1,0 +1,23 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="560" height="1024" viewBox="0 0 560 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="decor-pattern" clip-path="url(#clip0_0_9)">
+<path id="Vector" d="M496 -54L535.8 -31V15L496 38L456.2 15V-31L496 -54Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_2" d="M579 -54L618.8 -31V15L579 38L539.2 15V-31L579 -54Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_3" d="M537 15L576.8 38V84L537 107L497.2 84V38L537 15Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_4" d="M620 15L659.8 38V84L620 107L580.2 84V38L620 15Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_5" d="M496 84L535.8 107V153L496 176L456.2 153V107L496 84Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_6" d="M579 84L618.8 107V153L579 176L539.2 153V107L579 84Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_7" d="M537 153L576.8 176V222L537 245L497.2 222V176L537 153Z" stroke="white" stroke-opacity="0.24" stroke-width="1.6" stroke-linejoin="round"/>
+<path id="Vector_8" d="M486 279C489.866 279 493 275.866 493 272C493 268.134 489.866 265 486 265C482.134 265 479 268.134 479 272C479 275.866 482.134 279 486 279Z" stroke="white" stroke-opacity="0.32" stroke-width="1.5"/>
+<path id="Vector_9" d="M438 343C440.761 343 443 340.761 443 338C443 335.239 440.761 333 438 333C435.239 333 433 335.239 433 338C433 340.761 435.239 343 438 343Z" stroke="white" stroke-opacity="0.32" stroke-width="1.5"/>
+<path id="Vector_10" d="M516 383C520.971 383 525 378.971 525 374C525 369.029 520.971 365 516 365C511.029 365 507 369.029 507 374C507 378.971 511.029 383 516 383Z" stroke="white" stroke-opacity="0.32" stroke-width="1.5"/>
+<path id="Vector_11" d="M300 696C303.314 696 306 693.314 306 690C306 686.686 303.314 684 300 684C296.686 684 294 686.686 294 690C294 693.314 296.686 696 300 696Z" stroke="white" stroke-opacity="0.32" stroke-width="1.5"/>
+<path id="Vector_12" d="M459.75 206.5H464.25V211.75H469.5V216.25H464.25V221.5H459.75V216.25H454.5V211.75H459.75V206.5Z" fill="white" fill-opacity="0.34"/>
+<path id="Vector_13" d="M522.5 297H525.5V300.5H529V303.5H525.5V307H522.5V303.5H519V300.5H522.5V297Z" fill="white" fill-opacity="0.3"/>
+<path id="Vector_14" d="M250.35 606.5H253.65V610.35H257.5V613.65H253.65V617.5H250.35V613.65H246.5V610.35H250.35V606.5Z" fill="white" fill-opacity="0.26"/>
+</g>
+<defs>
+<clipPath id="clip0_0_9">
+<rect width="560" height="1024" fill="white"/>
+</clipPath>
+</defs>
+</svg>
