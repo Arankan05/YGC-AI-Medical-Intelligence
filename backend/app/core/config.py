@@ -73,6 +73,12 @@ class Settings(BaseSettings):
         description="Overpass API endpoint for healthcare provider discovery",
     )
 
+    # OCR Settings
+    TESSERACT_CMD: Optional[str] = Field(
+        default=None,
+        description="Path to Tesseract executable (e.g. C:\\Program Files\\Tesseract-OCR\\tesseract.exe)",
+    )
+
     # Environment
     ENVIRONMENT: str = Field(
         default="development",
