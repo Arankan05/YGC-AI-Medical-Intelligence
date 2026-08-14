@@ -311,15 +311,24 @@ export const providerRankingWeights =
   "Specialty (40%) · Distance (30%) · Completeness (15%) · Verified (15%)";
 
 export const providerEmptyState = {
-  title: "No providers found in this area",
-  description:
-    "No healthcare facilities were returned within your search radius. Try expanding the search radius or searching for a neighbouring town.",
+  headline: "No providers found in this area",
+  body: "No healthcare facilities were returned within your search radius. Try expanding the search radius or searching for a neighbouring town.",
+  searchLog: [
+    { label: "AREA SEARCHED", value: "Selected location within radius" },
+    { label: "SOURCE DATA", value: "OpenStreetMap healthcare database" },
+    { label: "SPECIALTY FILTERS", value: "Medical clinics and pharmacies" },
+  ],
+  reassurance: "We never invent placeholder clinics or doctors when local data is not available.",
 };
 
 export const providerErrorState = {
-  title: "Healthcare provider directory is temporarily unavailable",
-  description:
-    "We could not reach OpenStreetMap / Overpass to retrieve healthcare facilities in this area. You can retry the search or check back shortly.",
+  headline: "Healthcare directory temporarily unavailable",
+  body: "We could not reach OpenStreetMap / Overpass to retrieve healthcare facilities in this area. You can retry the search or check back shortly.",
+  technical: [
+    { label: "ENDPOINT", value: "Overpass API / Nominatim geocoder" },
+    { label: "STATUS", value: "Service unreachable or timed out" },
+  ],
+  reassurance: "Your medical documents and search queries remain completely private.",
 };
 
 export const securityToggles = [
