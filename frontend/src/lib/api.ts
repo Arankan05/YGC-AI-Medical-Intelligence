@@ -280,6 +280,13 @@ const defaultApiImplementation: MediGuardianApi = {
     onProgress?: (percent: number) => void
   ): Promise<MedicalDocument> {
     const token = await getAccessToken();
+    if (!token) {
+      console.warn("[uploadDocument] Auth check failed: No active Supabase access token found.");
+      throw new Error(
+        "Authentication credentials were not provided. Please sign in and try again."
+      );
+    }
+
     const formData = new FormData();
     formData.append("file", input.file);
 
@@ -304,9 +311,7 @@ const defaultApiImplementation: MediGuardianApi = {
     return new Promise<MedicalDocument>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${API_BASE}/api/documents/upload`);
-      if (token) {
-        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      }
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
       if (xhr.upload && onProgress) {
         xhr.upload.onprogress = (event) => {
