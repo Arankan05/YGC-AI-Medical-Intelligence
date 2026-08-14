@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
