@@ -58,10 +58,6 @@ export function SignUpForm() {
       });
       router.push("/welcome");
     } catch (error) {
-      if (error instanceof ApiNotConfiguredError) {
-        router.push("/welcome");
-        return;
-      }
       setFormError(toErrorMessage(error));
     } finally {
       setSubmitting(false);

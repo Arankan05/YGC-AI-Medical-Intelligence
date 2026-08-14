@@ -38,11 +38,6 @@ export function SignInForm() {
       await api().signIn({ email, password, keepSignedIn });
       router.push("/dashboard");
     } catch (error) {
-      // Backend not wired yet — the design has no server, so the UI stays usable.
-      if (error instanceof ApiNotConfiguredError) {
-        router.push("/dashboard");
-        return;
-      }
       setFormError(toErrorMessage(error));
     } finally {
       setSubmitting(false);
