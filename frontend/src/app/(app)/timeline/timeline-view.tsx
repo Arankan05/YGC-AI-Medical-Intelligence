@@ -16,7 +16,7 @@ import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { Panel } from "@/components/panel";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { RiskLevel, TimelineEvent, TimelineEventKind } from "@/lib/types";
+import type { TimelineEvent, TimelineEventKind } from "@/lib/types";
 
 const CHIPS: FilterChip[] = [
   { value: "all", label: "All events" },

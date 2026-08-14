@@ -2,29 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  FileText,
-  Pill,
-  Sparkles,
-  TrendingUp,
-  Upload,
-} from "lucide-react";
+import { FileText, Pill, Upload } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { MetricCard } from "@/components/metric-card";
 import { Panel, PanelHeader } from "@/components/panel";
 import { RiskBadge } from "@/components/risk-badge";
 import { api } from "@/lib/api";
-import { emptyStateMetrics } from "@/lib/data";
-import { cn } from "@/lib/utils";
 import type { DashboardMetric, Finding, MedicalDocument, Medication } from "@/lib/types";
 
 export default function DashboardPage() {
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;

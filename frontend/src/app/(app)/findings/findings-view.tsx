@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Filter, Sparkles, Upload } from "lucide-react";
+import { Sparkles, Upload } from "lucide-react";
 
 import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { RiskBadge } from "@/components/risk-badge";
-import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import type { Finding, RiskLevel } from "@/lib/types";
+import type { Finding } from "@/lib/types";
 
 const CHIPS: FilterChip[] = [
   { value: "all", label: "All findings" },
