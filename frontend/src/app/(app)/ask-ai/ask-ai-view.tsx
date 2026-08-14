@@ -19,7 +19,6 @@ import {
   answerPipeline,
   askAiScopeNote,
   askAiSuggestions,
-  recordTotals,
   safetyRules,
 } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -81,8 +80,7 @@ export function AskAiView({
                 Record assistant
               </span>
               <span className="text-xs leading-4 font-medium text-neutral-500">
-                Searching {recordTotals.documents} documents ·{" "}
-                {recordTotals.events} medical events
+                Searching your uploaded medical records
               </span>
             </span>
           </div>

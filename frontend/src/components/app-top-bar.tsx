@@ -102,7 +102,7 @@ export function AppTopBar({
             <ul className="max-h-[320px] overflow-y-auto">
               {notifications.length === 0 && (
                 <li className="px-4 py-6 text-center text-[13px] text-neutral-500">
-                  Nothing needs your attention right now.
+                  No notifications yet.
                 </li>
               )}
               {notifications.map((finding) => (

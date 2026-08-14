@@ -6,8 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopBar } from "@/components/app-top-bar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { api } from "@/lib/api";
-import { notificationFindings } from "@/lib/data";
-import type { UserProfile } from "@/lib/types";
+import type { Finding, UserProfile } from "@/lib/types";
 
 /**
  * Figma: ⚙ Shell Template (node 23:134) — App Sidebar + App Top Bar + content.
@@ -23,6 +22,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Finding[]>([]);
   const [userProfile, setUserProfile] = useState<
     Pick<UserProfile, "fullName" | "initials" | "accountType">
   >({
@@ -47,6 +47,20 @@ export function AppShell({
       .catch(() => {
         // Keeps neutral unauthenticated state if unready
       });
+
+    api()
+      .listNotifications()
+      .then((items) => {
+        if (active) {
+          setNotifications(items || []);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setNotifications([]);
+        }
+      });
+
     return () => {
       active = false;
     };
@@ -76,7 +90,7 @@ export function AppShell({
           <AppTopBar
             title={title}
             subtitle={subtitle}
-            notifications={notificationFindings}
+            notifications={notifications}
             onOpenNav={() => setNavOpen(true)}
           />
         </Suspense>

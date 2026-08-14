@@ -70,6 +70,7 @@ export interface MediGuardianApi {
   listCrossCheckIssues(): Promise<CrossCheckIssue[]>;
   listLabResults(): Promise<LabResult[]>;
   listFindings(): Promise<Finding[]>;
+  listNotifications(): Promise<Finding[]>;
   getFinding(findingId: string): Promise<Finding>;
 
   askAi(input: AskAiInput): Promise<ChatMessage>;
@@ -400,6 +401,10 @@ const defaultApiImplementation: MediGuardianApi = {
   },
 
   async listFindings(): Promise<Finding[]> {
+    return [];
+  },
+
+  async listNotifications(): Promise<Finding[]> {
     return [];
   },
 
