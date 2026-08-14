@@ -84,7 +84,7 @@ export default function DashboardPage() {
         {/* metric-row (19:156) */}
         <div className="grid w-full grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {metrics.map((metric) => (
-            <MetricCard key={metric.id} metric={metric} muted={documents.length === 0} />
+            <MetricCard key={metric.id} metric={metric} muted={loading || documents.length === 0} />
           ))}
         </div>
 
