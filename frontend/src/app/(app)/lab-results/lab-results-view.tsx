@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Check, Sparkles, TrendingDown, TrendingUp, Upload } from "lucide-react";
+import { Calendar, Upload } from "lucide-react";
 
 import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type { LabResult } from "@/lib/types";
 
 const CHIPS: FilterChip[] = [
@@ -43,7 +42,7 @@ export function LabResultsView() {
       results.filter((result) => {
         if (filter === "all") return true;
         if (filter === "out-of-range") return result.severity !== "ok";
-        if (filter === "trending") return result.history.length > 1;
+        if (filter === "trending") return result.points && result.points.length > 1;
         return true;
       }),
     [results, filter]
@@ -95,20 +94,20 @@ export function LabResultsView() {
                   className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
                 >
                   <td className="px-[18px] py-[13px] text-sm font-medium text-neutral-900">
-                    {result.testName}
+                    {result.name}
                   </td>
                   <td className="py-[13px] text-[13px] text-neutral-700">
-                    {result.value} {result.unit}
+                    {result.latestValueLabel || result.latestValue} {result.unit}
                   </td>
                   <td className="py-[13px] text-[13px] text-neutral-500">
                     {result.referenceRange}
                   </td>
                   <td className="py-[13px] text-[13px] text-neutral-500">
-                    {result.date}
+                    {result.latestDate}
                   </td>
                   <td className="py-[13px]">
                     <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">
-                      NORMAL
+                      {result.statusLabel || "NORMAL"}
                     </span>
                   </td>
                 </tr>

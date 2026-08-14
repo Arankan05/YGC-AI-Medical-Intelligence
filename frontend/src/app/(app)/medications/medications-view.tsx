@@ -233,12 +233,12 @@ export function MedicationsView() {
                     {medication.prescribedBy}
                   </td>
                   <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
-                    {medication.prescribedDate}
+                    {medication.startedOn}
                   </td>
                   <td className="py-[13px] pr-[18px]">
                     <div className="flex flex-wrap gap-1.5">
                       {medication.flags.map((flag) => (
-                        <FlagChip key={flag} kind={flag} />
+                        <FlagChip key={flag} flag={flag} />
                       ))}
                       {medication.flags.length === 0 && (
                         <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">

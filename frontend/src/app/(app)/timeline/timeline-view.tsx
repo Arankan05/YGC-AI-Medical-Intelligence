@@ -42,12 +42,6 @@ const KIND_STYLES: Record<
   imaging: { icon: Beaker, slot: "bg-brand-50", ink: "text-brand-700" },
 };
 
-const TAG_STYLES: Record<RiskLevel, string> = {
-  high: "bg-risk-high-bg text-risk-high",
-  medium: "bg-risk-med-bg text-risk-med",
-  low: "bg-risk-low-bg text-risk-low",
-};
-
 export function TimelineView() {
   const [filter, setFilter] = useState("all");
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -134,7 +128,7 @@ export function TimelineView() {
                       {item.date} · {item.provider}
                     </p>
                     <p className="text-xs text-neutral-600">
-                      {item.description}
+                      {item.summary}
                     </p>
                   </div>
                 </div>
