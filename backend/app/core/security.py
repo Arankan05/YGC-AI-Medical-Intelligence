@@ -94,7 +94,7 @@ def validate_supabase_token(
     last_error: Optional[str] = None
 
     # Strategy 1: Asymmetric JWKS verification (Standard for Supabase ES256 / RS256)
-    if settings.SUPABASE_URL:
+    if settings.SUPABASE_URL and alg in ["ES256", "RS256", "EdDSA"]:
         jwks_url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
         try:
             jwks_client = get_jwks_client(jwks_url)
@@ -102,7 +102,7 @@ def validate_supabase_token(
             payload = jwt.decode(
                 clean_token,
                 signing_key.key,
-                algorithms=["ES256", "RS256", "EdDSA", "HS256"],
+                algorithms=["ES256", "RS256", "EdDSA"],
                 options={
                     "verify_signature": True,
                     "verify_exp": True,
@@ -143,6 +143,8 @@ def validate_supabase_token(
                 detail="Authentication token has expired.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        except HTTPException:
+            raise
         except Exception as jwks_err:
             last_error = f"JWKS: {type(jwks_err).__name__} ({jwks_err})"
             logger.debug("JWKS validation attempt failed: %s", last_error)
@@ -182,7 +184,11 @@ def validate_supabase_token(
 
                 user_id = payload.get("sub")
                 if not user_id:
-                    continue
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid token payload: missing user identifier.",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
 
                 logger.info("Successfully validated Supabase JWT via local secret (sub=%s)", user_id)
                 return AuthenticatedUser(
@@ -199,6 +205,8 @@ def validate_supabase_token(
                     detail="Authentication token has expired.",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
+            except HTTPException:
+                raise
             except Exception as hmac_err:
                 last_error = f"HMAC: {type(hmac_err).__name__}"
 
@@ -275,12 +283,15 @@ async def get_current_application_user(
     corresponding application User record in the PostgreSQL database.
 
     Ensures strict tenant isolation:
-    - Finds or provisions the User record matching the authenticated Supabase identity.
-    - Ensures the default Patient record exists for the user.
+    - Finds only the User record matching the authenticated Supabase identity.
+    - Rejects unmapped or unauthorized requests with HTTP 401.
     - Never allows access to another user's record.
 
     Returns:
         User SQLAlchemy model instance for the authenticated user.
+
+    Raises:
+        HTTPException(401): If no application user record exists for this identity.
     """
     user: Optional[User] = None
 
@@ -289,29 +300,22 @@ async def get_current_application_user(
         user_uuid = uuid.UUID(auth_user.id)
         user = db.query(User).filter(User.id == user_uuid).first()
     except (ValueError, TypeError, AttributeError):
-        user_uuid = None
+        pass
 
     # Step 2: Fallback to matching by unique email if not found by primary key UUID
     if user is None and auth_user.email:
         user = db.query(User).filter(User.email == auth_user.email).first()
 
-    # Step 3: Auto-provision application User and Patient if not yet in PostgreSQL
     if user is None:
-        target_id = user_uuid or uuid.uuid4()
-        email = auth_user.email or f"{target_id}@user.local"
-        user = User(id=target_id, email=email)
-        db.add(user)
-        patient = Patient(user_id=user.id)
-        db.add(patient)
-        db.commit()
-        db.refresh(user)
-        logger.info("Auto-provisioned application User %s (%s) and Patient profile.", user.id, user.email)
-    else:
-        # Ensure patient profile exists
-        patient = db.query(Patient).filter(Patient.user_id == user.id).first()
-        if not patient:
-            patient = Patient(user_id=user.id)
-            db.add(patient)
-            db.commit()
+        logger.warning(
+            "Authenticated Supabase user has no matching application user record (id=%s, email=%s)",
+            auth_user.id,
+            auth_user.email,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account not found in application database. Please ensure your account has been registered.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return user
