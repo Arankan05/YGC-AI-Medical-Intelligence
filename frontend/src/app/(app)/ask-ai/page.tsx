@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/app-shell";
-import { chatHistory } from "@/lib/data";
 
 import { AskAiView } from "./ask-ai-view";
 
@@ -14,9 +13,9 @@ export default function AskAiPage() {
   return (
     <AppShell
       title="Ask AI"
-      subtitle="Questions answered only from your own uploaded records"
+      subtitle="Questions answered strictly from your uploaded medical records"
     >
-      <AskAiView thread={chatHistory} variant="default" />
+      <AskAiView thread={[]} variant="default" />
     </AppShell>
   );
 }

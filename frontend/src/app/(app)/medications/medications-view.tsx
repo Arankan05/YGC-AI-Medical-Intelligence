@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Copy,
@@ -10,6 +10,7 @@ import {
   RefreshCw,
   ShieldAlert,
   Scale,
+  Upload,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,9 +18,8 @@ import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { FlagChip } from "@/components/flag-chip";
 import { Button } from "@/components/ui/button";
 import { api, toErrorMessage } from "@/lib/api";
-import { crossCheckSummary, medications } from "@/lib/data";
 import { cn } from "@/lib/utils";
-import type { MedicationFlagKind } from "@/lib/types";
+import type { CrossCheckIssue, Medication, MedicationFlagKind } from "@/lib/types";
 
 const CHIPS: FilterChip[] = [
   { value: "all", label: "All medications" },
@@ -35,10 +35,42 @@ const SUMMARY_ICONS: Record<MedicationFlagKind, LucideIcon> = {
   dosage: Scale,
 };
 
+const SUMMARY_LABELS: Record<MedicationFlagKind, string> = {
+  interaction: "Drug interactions",
+  allergy: "Allergy contradictions",
+  duplicate: "Duplicate prescriptions",
+  dosage: "Dosage conflicts",
+};
+
 export function MedicationsView() {
   const [filter, setFilter] = useState("all");
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [crossChecks, setCrossChecks] = useState<CrossCheckIssue[]>([]);
+  const [loading, setLoading] = useState(true);
   const [rerunning, setRerunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function loadData() {
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      api().listMedications(),
+      api().listCrossCheckIssues(),
+    ])
+      .then(([meds, issues]) => {
+        setMedications(meds || []);
+        setCrossChecks(issues || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(toErrorMessage(err));
+        setLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const rows = useMemo(
     () =>
@@ -47,20 +79,28 @@ export function MedicationsView() {
         if (filter === "flagged") return medication.flags.length > 0;
         return medication.status === filter;
       }),
-    [filter]
+    [medications, filter]
   );
 
   async function handleRerun() {
     setRerunning(true);
     setError(null);
     try {
-      await api().listCrossCheckIssues();
+      const issues = await api().listCrossCheckIssues();
+      setCrossChecks(issues || []);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
       setRerunning(false);
     }
   }
+
+  const kinds: MedicationFlagKind[] = [
+    "interaction",
+    "allergy",
+    "duplicate",
+    "dosage",
+  ];
 
   return (
     <div className="flex w-full flex-col gap-[18px] px-4 py-[22px] md:px-[26px]">
@@ -84,171 +124,145 @@ export function MedicationsView() {
       {error && (
         <p
           role="alert"
-          className="rounded-[10px] border border-risk-high-border bg-risk-high-bg px-4 py-3 text-[13px] leading-[19px] text-risk-high"
+          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
           {error}
         </p>
       )}
 
-      {/* cross-check-summary (26:594) */}
-      <div className="grid w-full grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-        {crossCheckSummary.map((card) => {
-          const Icon = SUMMARY_ICONS[card.id];
-          const high = card.risk === "high";
+      {/* summary-row (26:599) */}
+      <div className="grid w-full grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        {kinds.map((kind) => {
+          const count = crossChecks.filter((i) => i.kind === kind).length;
+          const high = kind === "allergy" || kind === "duplicate";
+          const Icon = SUMMARY_ICONS[kind];
           return (
             <div
-              key={card.id}
-              className={cn(
-                "flex flex-col gap-2 rounded-xl border px-4 py-3.5",
-                high
-                  ? "border-risk-high-border bg-risk-high-bg"
-                  : "border-risk-med-border bg-risk-med-bg"
-              )}
+              key={kind}
+              className="flex items-center gap-3.5 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card"
             >
-              <div className="flex items-center gap-[9px]">
+              <span
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                  count === 0
+                    ? "bg-neutral-100"
+                    : high
+                      ? "bg-risk-high-bg"
+                      : "bg-risk-med-bg"
+                )}
+              >
                 <Icon
                   className={cn(
-                    "size-4 shrink-0",
-                    high ? "text-risk-high" : "text-risk-med"
+                    "size-[18px]",
+                    count === 0
+                      ? "text-neutral-500"
+                      : high
+                        ? "text-risk-high"
+                        : "text-risk-med"
                   )}
                   strokeWidth={1.8}
                 />
-                <p
-                  className={cn(
-                    "type-overline",
-                    high ? "text-risk-high" : "text-risk-med"
-                  )}
-                >
-                  {card.label}
-                </p>
-              </div>
-              <div className="flex w-full items-center gap-[9px]">
-                <p
-                  className={cn(
-                    "text-[22px] leading-[30px] font-semibold tracking-[-0.3px]",
-                    high ? "text-risk-high" : "text-risk-med"
-                  )}
-                >
-                  {card.count}
-                </p>
-                <p className="flex-1 text-[13px] leading-[19px] text-neutral-600">
-                  {card.detail}
-                </p>
+              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
+                  {count}
+                </span>
+                <span className="type-overline text-neutral-500">
+                  {SUMMARY_LABELS[kind]}
+                </span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* medication-table (26:633) */}
+      {/* medications-table (26:659) */}
       <div className="w-full overflow-hidden rounded-xl border border-neutral-200 bg-neutral-0 shadow-card">
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[1040px] border-collapse text-left">
+          <table className="w-full min-w-[960px] border-collapse text-left">
             <thead>
               <tr className="bg-neutral-50">
                 <th className="type-overline px-[18px] py-3 text-neutral-500">
                   MEDICATION
                 </th>
-                <th className="type-overline w-[100px] py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
                   DOSAGE
                 </th>
-                <th className="type-overline w-[150px] py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
                   FREQUENCY
                 </th>
-                <th className="type-overline w-[120px] py-3 text-neutral-500">
-                  STARTED
+                <th className="type-overline w-[170px] px-0 py-3 text-neutral-500">
+                  PRESCRIBER
                 </th>
-                <th className="type-overline w-[210px] py-3 text-neutral-500">
-                  SOURCE DOCUMENT
+                <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
+                  PRESCRIBED
                 </th>
-                <th className="type-overline w-[230px] py-3 text-neutral-500">
-                  CROSS-CHECK
+                <th className="type-overline w-[190px] px-0 py-3 text-neutral-500">
+                  SAFETY FLAGS
                 </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((medication) => {
-                const stopped = medication.status === "stopped";
-                return (
-                  <tr
-                    key={medication.id}
-                    className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
-                  >
-                    <td className="px-[18px] py-3">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={cn(
-                            "flex size-8 shrink-0 items-center justify-center rounded-md",
-                            stopped ? "bg-neutral-100" : "bg-brand-50"
-                          )}
-                        >
-                          <Pill
-                            className={cn(
-                              "size-[15px]",
-                              stopped ? "text-neutral-500" : "text-brand-700"
-                            )}
-                            strokeWidth={1.8}
-                          />
+              {rows.map((medication) => (
+                <tr
+                  key={medication.id}
+                  className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
+                >
+                  <td className="px-[18px] py-[13px]">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
+                        <Pill className="size-[15px] text-brand-700" strokeWidth={1.8} />
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
+                          {medication.name}
                         </span>
-                        <span className="flex flex-col gap-0.5">
-                          <span
-                            className={cn(
-                              "text-[13px] leading-[18px] font-medium",
-                              stopped ? "text-neutral-600" : "text-neutral-800"
-                            )}
-                          >
-                            {medication.name}
-                          </span>
-                          <span className="text-xs leading-4 font-medium text-neutral-500">
-                            {medication.genericName}
-                          </span>
+                        <span className="text-xs leading-4 font-medium text-neutral-500">
+                          {medication.genericName}
                         </span>
-                      </div>
-                    </td>
-                    <td
-                      className={cn(
-                        "py-3 text-[13px] leading-[18px] font-medium",
-                        stopped ? "text-neutral-600" : "text-neutral-800"
-                      )}
-                    >
-                      {medication.dosage}
-                    </td>
-                    <td className="py-3 text-[13px] leading-[19px] text-neutral-600">
-                      {medication.frequency}
-                    </td>
-                    <td className="py-3 text-[13px] leading-[19px] text-neutral-600">
-                      {medication.startedOn}
-                    </td>
-                    <td className="py-3">
-                      <Link
-                        href="/documents"
-                        className="text-xs leading-4 font-medium text-brand-700 hover:underline"
-                      >
-                        {medication.sourceDocumentId}
-                      </Link>
-                    </td>
-                    <td className="py-3">
-                      {medication.flags.length === 0 ? (
-                        <span className="text-xs leading-4 font-medium text-status-ok">
-                          No issues found
-                        </span>
-                      ) : (
-                        <span className="flex flex-wrap gap-1.5">
-                          {medication.flags.map((flag) => (
-                            <FlagChip key={flag} flag={flag} />
-                          ))}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                    {medication.dosage}
+                  </td>
+                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                    {medication.frequency}
+                  </td>
+                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                    {medication.prescribedBy}
+                  </td>
+                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
+                    {medication.prescribedDate}
+                  </td>
+                  <td className="py-[13px] pr-[18px]">
+                    <div className="flex flex-wrap gap-1.5">
+                      {medication.flags.map((flag) => (
+                        <FlagChip key={flag} kind={flag} />
+                      ))}
+                      {medication.flags.length === 0 && (
+                        <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">
+                          NO CONFLICTS
                         </span>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {rows.length === 0 && (
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={6} className="px-[18px] py-12 text-center">
                     <p className="text-sm leading-[21px] text-neutral-600">
-                      No medications match this filter.
+                      No medication records found. Medications will appear here once extracted from your uploaded medical records.
                     </p>
+                    <Link
+                      href="/documents/upload"
+                      className="mt-2 inline-flex items-center gap-1.5 text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
+                    >
+                      <Upload className="size-3.5" />
+                      Upload prescriptions or notes
+                    </Link>
                   </td>
                 </tr>
               )}
@@ -257,14 +271,13 @@ export function MedicationsView() {
         </div>
       </div>
 
-      {/* method note (26:787) */}
+      {/* note (26:802) */}
       <div className="flex w-full items-start gap-2.5 rounded-[10px] bg-neutral-50 px-4 py-3">
         <Info className="size-4 shrink-0 text-neutral-500" strokeWidth={1.8} />
         <p className="flex-1 text-[13px] leading-[19px] text-neutral-600">
-          Duplicates, dosage conflicts and date comparisons are computed
-          deterministically in backend code. The AI layer is used for interpreting
-          medical language and explaining findings, not for arithmetic. Every flag
-          links back to the source document it came from.
+          Cross-checks compare prescriptions across all your uploaded documents.
+          Potential interactions and duplicate therapies are flagged for review with
+          your doctor or pharmacist.
         </p>
       </div>
     </div>

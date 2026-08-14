@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/app-shell";
-import { recordTotals } from "@/lib/data";
 
 import { FindingsView } from "./findings-view";
 
@@ -14,7 +13,7 @@ export default function FindingsPage() {
   return (
     <AppShell
       title="AI findings"
-      subtitle={`${recordTotals.findings} potential issues detected across ${recordTotals.documents} documents · every finding links to its source`}
+      subtitle="Potential cross-document contradictions and safety alerts"
     >
       <FindingsView />
     </AppShell>

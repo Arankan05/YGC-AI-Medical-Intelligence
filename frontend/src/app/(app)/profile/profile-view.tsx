@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import { Download, FileClock, Loader2, Lock, Monitor, Smartphone } from "lucide-react";
+import { Download, FileClock, Loader2, Lock, LogIn, Monitor, Smartphone } from "lucide-react";
 
 import { Field, fieldInputClass } from "@/components/field";
 import { Panel, PanelHeader } from "@/components/panel";
@@ -153,32 +154,45 @@ export function ProfileView() {
   }
 
   if (error && !profile) {
+    const isSessionError = error.toLowerCase().includes("session") || error.toLowerCase().includes("sign in");
     return (
       <div className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 px-4">
-        <div className="max-w-md rounded-xl border border-risk-high-border bg-risk-high-bg p-6 text-center">
-          <h3 className="text-base font-semibold text-risk-high">
-            Failed to Load Profile
+        <div className="max-w-md rounded-xl border border-neutral-200 bg-neutral-0 p-6 text-center shadow-card">
+          <h3 className="text-base font-semibold text-neutral-900">
+            {isSessionError ? "Sign In Required" : "Failed to Load Profile"}
           </h3>
-          <p className="mt-2 text-sm text-neutral-700">{error}</p>
-          <Button
-            className="mt-4"
-            onClick={() => {
-              setLoading(true);
-              setError(null);
-              api()
-                .getProfile()
-                .then((d) => {
-                  setProfile(d);
-                  setLoading(false);
-                })
-                .catch((e) => {
-                  setError(toErrorMessage(e));
-                  setLoading(false);
-                });
-            }}
-          >
-            Retry
-          </Button>
+          <p className="mt-2 text-sm text-neutral-600">
+            {isSessionError
+              ? "You are not currently signed in. Please sign in to view your profile and manage your medical records."
+              : error}
+          </p>
+          <div className="mt-5 flex justify-center gap-3">
+            {isSessionError ? (
+              <Button render={<Link href="/sign-in" />} className="gap-2">
+                <LogIn className="size-4" />
+                Sign in to your account
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  api()
+                    .getProfile()
+                    .then((d) => {
+                      setProfile(d);
+                      setLoading(false);
+                    })
+                    .catch((e) => {
+                      setError(toErrorMessage(e));
+                      setLoading(false);
+                    });
+                }}
+              >
+                Retry
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -334,7 +348,7 @@ export function ProfileView() {
             <div className="flex w-full gap-3">
               <div className="flex flex-1 flex-col gap-0.5">
                 <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-                  {docCount !== null ? docCount : "—"}
+                  {docCount !== null ? docCount : "0"}
                 </span>
                 <span className="type-overline text-neutral-500">
                   DOCUMENTS

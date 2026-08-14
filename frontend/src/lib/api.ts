@@ -23,9 +23,7 @@ import type {
 
 export class ApiNotConfiguredError extends Error {
   constructor(operation: string) {
-    super(
-      `"${operation}" is not connected to a backend yet.`
-    );
+    super(`"${operation}" is not connected to a backend yet.`);
     this.name = "ApiNotConfiguredError";
   }
 }
@@ -199,12 +197,15 @@ async function authFetch(
 const defaultApiImplementation: MediGuardianApi = {
   async signIn(input: SignInInput): Promise<void> {
     const sb = getSupabase();
-    const { error } = await sb.auth.signInWithPassword({
+    const { data, error } = await sb.auth.signInWithPassword({
       email: input.email,
       password: input.password,
     });
     if (error) {
       throw new Error(error.message);
+    }
+    if (!data.session) {
+      throw new Error("Failed to start session. Please try again.");
     }
     // Sync application User & Patient records in PostgreSQL
     try {
@@ -216,7 +217,7 @@ const defaultApiImplementation: MediGuardianApi = {
 
   async signUp(input: SignUpInput): Promise<void> {
     const sb = getSupabase();
-    const { error } = await sb.auth.signUp({
+    const { data, error } = await sb.auth.signUp({
       email: input.email,
       password: input.password,
       options: {
@@ -229,7 +230,20 @@ const defaultApiImplementation: MediGuardianApi = {
     if (error) {
       throw new Error(error.message);
     }
-    // If auto-authenticated immediately, sync to PostgreSQL
+    // Check if session was created; if not, attempt auto sign-in
+    if (!data.session) {
+      const { data: signInData, error: signInError } =
+        await sb.auth.signInWithPassword({
+          email: input.email,
+          password: input.password,
+        });
+      if (signInError || !signInData.session) {
+        throw new Error(
+          "Account created! Please check your email to confirm your account before signing in."
+        );
+      }
+    }
+    // Sync to PostgreSQL
     try {
       await authFetch("/api/auth/register", { method: "POST" });
     } catch {
@@ -247,6 +261,9 @@ const defaultApiImplementation: MediGuardianApi = {
 
   async listDocuments(): Promise<MedicalDocument[]> {
     const res = await authFetch("/api/documents", { method: "GET" });
+    if (res.status === 401) {
+      return [];
+    }
     if (!res.ok) {
       const err = await res
         .json()
@@ -365,11 +382,27 @@ const defaultApiImplementation: MediGuardianApi = {
     }
   },
 
-  listTimeline: unconfigured("listTimeline"),
-  listMedications: unconfigured("listMedications"),
-  listCrossCheckIssues: unconfigured("listCrossCheckIssues"),
-  listLabResults: unconfigured("listLabResults"),
-  listFindings: unconfigured("listFindings"),
+  // Returns empty arrays for features whose backend endpoints do not exist yet
+  async listTimeline(): Promise<TimelineEvent[]> {
+    return [];
+  },
+
+  async listMedications(): Promise<Medication[]> {
+    return [];
+  },
+
+  async listCrossCheckIssues(): Promise<CrossCheckIssue[]> {
+    return [];
+  },
+
+  async listLabResults(): Promise<LabResult[]> {
+    return [];
+  },
+
+  async listFindings(): Promise<Finding[]> {
+    return [];
+  },
+
   getFinding: (id: string) => unconfigured("getFinding")(id),
   askAi: (input: AskAiInput) => unconfigured("askAi")(input),
   searchProviders: (params: ProviderSearchParams) =>

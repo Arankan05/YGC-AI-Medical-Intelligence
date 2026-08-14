@@ -13,7 +13,7 @@ export default function LabResultsPage() {
   return (
     <AppShell
       title="Lab results"
-      subtitle="18 results from 3 lab reports · 4 tests with enough history to trend"
+      subtitle="Structured lab results and biomarker trends"
     >
       <LabResultsView />
     </AppShell>

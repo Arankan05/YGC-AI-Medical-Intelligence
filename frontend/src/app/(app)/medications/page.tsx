@@ -13,7 +13,7 @@ export default function MedicationsPage() {
   return (
     <AppShell
       title="Medications"
-      subtitle="5 active · 2 discontinued · last cross-checked 2 hours ago"
+      subtitle="Review extracted medications and cross-document safety checks"
     >
       <MedicationsView />
     </AppShell>

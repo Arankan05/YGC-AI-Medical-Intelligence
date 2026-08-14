@@ -13,7 +13,7 @@ export default function TimelinePage() {
   return (
     <AppShell
       title="Patient timeline"
-      subtitle="27 medical events merged from 12 documents across 4 providers"
+      subtitle="Chronological record of your medical events"
     >
       <TimelineView />
     </AppShell>
