@@ -83,7 +83,7 @@ export function SignUpForm() {
           id="fullName"
           name="fullName"
           autoComplete="name"
-          placeholder="Ruwan Perera"
+          placeholder="e.g. John Doe"
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
           aria-invalid={Boolean(errors.fullName)}
@@ -97,7 +97,7 @@ export function SignUpForm() {
           name="email"
           type="email"
           autoComplete="email"
-          placeholder="r.perera@example.lk"
+          placeholder="you@example.com"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           aria-invalid={Boolean(errors.email)}

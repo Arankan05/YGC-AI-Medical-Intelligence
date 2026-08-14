@@ -63,7 +63,7 @@ export function SignInForm() {
           name="email"
           type="email"
           autoComplete="email"
-          placeholder="r.perera@example.lk"
+          placeholder="you@example.com"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           aria-invalid={Boolean(errors.email)}
