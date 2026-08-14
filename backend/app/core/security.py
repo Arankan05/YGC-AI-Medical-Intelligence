@@ -2,7 +2,7 @@ import base64
 import logging
 import uuid
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -151,7 +151,7 @@ def validate_supabase_token(
 
     # Strategy 2: Local symmetric HMAC verification if SUPABASE_JWT_SECRET is configured
     if settings.SUPABASE_JWT_SECRET:
-        secrets_to_try = [settings.SUPABASE_JWT_SECRET]
+        secrets_to_try: list[Union[str, bytes]] = [settings.SUPABASE_JWT_SECRET]
         try:
             # Also try base64 decoded bytes if secret has padding
             decoded_b64 = base64.b64decode(settings.SUPABASE_JWT_SECRET)
