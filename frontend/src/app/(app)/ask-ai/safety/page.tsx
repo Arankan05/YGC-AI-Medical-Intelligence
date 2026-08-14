@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/app-shell";
-import { safetyChatHistory } from "@/lib/data";
 
 import { AskAiView } from "../ask-ai-view";
 
@@ -16,7 +15,7 @@ export default function AskAiSafetyPage() {
       title="Ask AI"
       subtitle="Safety behaviour · the assistant never claims or implies a diagnosis"
     >
-      <AskAiView thread={safetyChatHistory} variant="safety" />
+      <AskAiView thread={[]} variant="safety" />
     </AppShell>
   );
 }

@@ -19,7 +19,6 @@ import {
   dataActions,
   deleteDataNote,
   isolationNotes,
-  securitySessions,
   securityToggles,
 } from "@/lib/data";
 import type { UserProfile } from "@/lib/types";
@@ -41,7 +40,15 @@ export function ProfileView() {
   const [toggles, setToggles] = useState(() =>
     Object.fromEntries(securityToggles.map((item) => [item.id, item.enabled]))
   );
-  const [sessions, setSessions] = useState(securitySessions);
+  const [sessions, setSessions] = useState([
+    {
+      id: "current-browser",
+      device: "Current Web Browser",
+      location: "Active Session",
+      lastActive: "Active now",
+      current: true,
+    },
+  ]);
   const [danger, setDanger] = useState<DangerAction>(null);
   const [status, setStatus] = useState<string | null>(null);
 

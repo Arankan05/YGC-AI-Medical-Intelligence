@@ -198,9 +198,8 @@ export function ProviderResultsView({
           : "Evenings";
 
   const criteria = [
-    { label: "DETECTED ISSUE", value: "Potential allergy contradiction" },
-    { label: "RECOMMENDED PROFESSIONAL", value: "Prescribing Doctor / Pharmacist" },
-    { label: "YOUR LOCATION", value: `${location} · 9.6615 N, 80.0255 E` },
+    { label: "SEARCH TARGET", value: "Healthcare Provider / Clinic" },
+    { label: "LOCATION", value: location },
     { label: "AVAILABILITY PREFERENCE", value: availabilityLabel },
     { label: "SEARCH RADIUS", value: `${radiusKm} km` },
   ];

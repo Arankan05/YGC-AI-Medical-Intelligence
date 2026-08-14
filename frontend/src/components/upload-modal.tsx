@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api, toErrorMessage } from "@/lib/api";
-import { demoUploadItems, uploadPipelineSteps } from "@/lib/data";
+import { uploadPipelineSteps } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import type { PipelineStep, UploadItem } from "@/lib/types";
 
@@ -62,7 +62,9 @@ function toUploadItem(file: File, index: number): UploadItem {
 }
 
 function pipelineFor(items: UploadItem[], processing: boolean): PipelineStep[] {
-  if (items === demoUploadItems) return uploadPipelineSteps;
+  if (items.length === 0) {
+    return uploadPipelineSteps.map((step) => ({ ...step, status: "pending" }));
+  }
   const validated = items.some((item) => item.status !== "failed");
   return uploadPipelineSteps.map((step, index) => {
     if (step.id === "validate")
@@ -87,9 +89,7 @@ export function UploadModal({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const staged = files.map(toUploadItem);
-  /** With nothing staged the modal shows the pipeline state exactly as designed. */
-  const items = staged.length > 0 ? staged : demoUploadItems;
+  const items = files.map(toUploadItem);
   const steps = pipelineFor(items, processing);
   const processable = items.filter((item) => item.status !== "failed").length;
 
@@ -189,72 +189,74 @@ export function UploadModal({
           </div>
 
           {/* file list (24:503) */}
-          <ul className="flex w-full flex-col gap-2.5">
-            {items.map((item) => {
-              const failed = item.status === "failed";
-              const inProgress =
-                item.status === "extracting" || item.status === "processing";
-              return (
-                <li
-                  key={item.id}
-                  className={cn(
-                    "flex w-full flex-col gap-[9px] rounded-[10px] border px-3.5 py-3",
-                    failed
-                      ? "border-risk-high-border bg-risk-high-bg"
-                      : "border-neutral-200 bg-neutral-50"
-                  )}
-                >
-                  <div className="flex w-full items-center gap-[11px]">
-                    <span
-                      className={cn(
-                        "flex size-[22px] shrink-0 items-center justify-center rounded-full text-neutral-0",
-                        failed
-                          ? "bg-risk-high"
-                          : inProgress
-                            ? "bg-brand-700"
-                            : "bg-status-ok"
-                      )}
-                    >
-                      {failed ? (
-                        <X className="size-3" strokeWidth={2.4} />
-                      ) : inProgress ? (
-                        <Upload className="size-3" strokeWidth={2.4} />
-                      ) : (
-                        <Check className="size-3" strokeWidth={2.4} />
-                      )}
-                    </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate text-[13px] leading-[18px] font-medium text-neutral-800">
-                        {item.fileName}
-                      </span>
+          {items.length > 0 && (
+            <ul className="flex w-full flex-col gap-2.5">
+              {items.map((item) => {
+                const failed = item.status === "failed";
+                const inProgress =
+                  item.status === "extracting" || item.status === "processing";
+                return (
+                  <li
+                    key={item.id}
+                    className={cn(
+                      "flex w-full flex-col gap-[9px] rounded-[10px] border px-3.5 py-3",
+                      failed
+                        ? "border-risk-high-border bg-risk-high-bg"
+                        : "border-neutral-200 bg-neutral-50"
+                    )}
+                  >
+                    <div className="flex w-full items-center gap-[11px]">
                       <span
                         className={cn(
-                          "text-xs leading-4 font-medium",
-                          failed ? "text-risk-high" : "text-neutral-500"
+                          "flex size-[22px] shrink-0 items-center justify-center rounded-full text-neutral-0",
+                          failed
+                            ? "bg-risk-high"
+                            : inProgress
+                              ? "bg-brand-700"
+                              : "bg-status-ok"
                         )}
                       >
-                        {item.sizeLabel}
-                        {item.message ? ` · ${item.message}` : ""}
+                        {failed ? (
+                          <X className="size-3" strokeWidth={2.4} />
+                        ) : inProgress ? (
+                          <Upload className="size-3" strokeWidth={2.4} />
+                        ) : (
+                          <Check className="size-3" strokeWidth={2.4} />
+                        )}
                       </span>
-                    </span>
-                    {inProgress && (
-                      <span className="text-xs leading-4 font-semibold text-neutral-700">
-                        {item.progress}%
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate text-[13px] leading-[18px] font-medium text-neutral-800">
+                          {item.fileName}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-xs leading-4 font-medium",
+                            failed ? "text-risk-high" : "text-neutral-500"
+                          )}
+                        >
+                          {item.sizeLabel}
+                          {item.message ? ` · ${item.message}` : ""}
+                        </span>
                       </span>
-                    )}
-                  </div>
-                  {inProgress && (
-                    <div className="h-[5px] w-full overflow-hidden rounded-full bg-neutral-200">
-                      <div
-                        className="h-[5px] rounded-full bg-brand-600 transition-[width]"
-                        style={{ width: `${item.progress}%` }}
-                      />
+                      {inProgress && (
+                        <span className="text-xs leading-4 font-semibold text-neutral-700">
+                          {item.progress}%
+                        </span>
+                      )}
                     </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                    {inProgress && (
+                      <div className="h-[5px] w-full overflow-hidden rounded-full bg-neutral-200">
+                        <div
+                          className="h-[5px] rounded-full bg-brand-600 transition-[width]"
+                          style={{ width: `${item.progress}%` }}
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
           {/* PROCESSING PIPELINE (24:534) */}
           <div className="flex w-full flex-col gap-3 rounded-[10px] bg-neutral-50 px-4 py-3.5">
