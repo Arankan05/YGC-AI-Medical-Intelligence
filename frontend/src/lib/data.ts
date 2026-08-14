@@ -15,10 +15,8 @@ import type {
   Medication,
   PipelineStep,
   Provider,
-  SecuritySession,
   TimelineEvent,
   UploadItem,
-  UserProfile,
 } from "@/lib/types";
 
 export const documents: MedicalDocument[] = [];
