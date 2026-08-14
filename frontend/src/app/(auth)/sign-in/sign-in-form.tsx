@@ -8,7 +8,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Field, fieldInputClass } from "@/components/field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { api, ApiNotConfiguredError, toErrorMessage } from "@/lib/api";
+import { api, toErrorMessage } from "@/lib/api";
 
 /** Figma: 01 · Sign In — form-panel (node 15:43). */
 export function SignInForm() {

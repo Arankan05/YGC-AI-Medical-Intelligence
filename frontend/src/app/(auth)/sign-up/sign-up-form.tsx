@@ -7,7 +7,7 @@ import { useState, type FormEvent } from "react";
 import { Field, fieldInputClass } from "@/components/field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { api, ApiNotConfiguredError, toErrorMessage } from "@/lib/api";
+import { api, toErrorMessage } from "@/lib/api";
 
 type FieldErrors = {
   fullName?: string;
