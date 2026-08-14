@@ -92,7 +92,11 @@ export function TimelineView() {
 
       {/* timeline body */}
       <Panel className="p-6">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-sm text-neutral-500">
+            Loading timeline events...
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <p className="text-sm leading-5 text-neutral-600">
               No medical events on your timeline yet. Events will appear here once extracted from your uploaded medical records.
