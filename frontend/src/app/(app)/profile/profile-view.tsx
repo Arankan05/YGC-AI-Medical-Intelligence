@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Download, FileClock, Lock, Monitor, Smartphone } from "lucide-react";
+import { Download, FileClock, Loader2, Lock, Monitor, Smartphone } from "lucide-react";
 
 import { Field, fieldInputClass } from "@/components/field";
 import { Panel, PanelHeader } from "@/components/panel";
@@ -15,9 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { api, toErrorMessage } from "@/lib/api";
 import {
-  currentUser,
   dataActions,
-  dataSummary,
   deleteDataNote,
   isolationNotes,
   securitySessions,
@@ -28,8 +26,17 @@ import type { UserProfile } from "@/lib/types";
 type DangerAction = "documents" | "account" | null;
 
 export function ProfileView() {
-  const [profile, setProfile] = useState<UserProfile>(currentUser);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    phone: "",
+    language: "",
+    dateOfBirth: "",
+  });
+  const [docCount, setDocCount] = useState<number | null>(null);
   const [toggles, setToggles] = useState(() =>
     Object.fromEntries(securityToggles.map((item) => [item.id, item.enabled]))
   );
@@ -42,26 +49,37 @@ export function ProfileView() {
     api()
       .getProfile()
       .then((data) => {
-        if (active) setProfile(data);
+        if (active) {
+          setProfile(data);
+          setEditForm({
+            fullName: data.fullName,
+            phone: data.phone === "—" ? "" : data.phone,
+            language: data.language,
+            dateOfBirth: data.dateOfBirth === "—" ? "" : data.dateOfBirth,
+          });
+          setLoading(false);
+        }
+      })
+      .catch((caught) => {
+        if (active) {
+          setError(toErrorMessage(caught));
+          setLoading(false);
+        }
+      });
+
+    api()
+      .listDocuments()
+      .then((docs) => {
+        if (active) setDocCount(docs.length);
       })
       .catch(() => {
-        // Fall back gracefully if session is unready
+        if (active) setDocCount(0);
       });
+
     return () => {
       active = false;
     };
   }, []);
-
-  const accountFields = [
-    { label: "FULL NAME", value: profile.legalName },
-    { label: "EMAIL", value: profile.email },
-    { label: "PHONE", value: profile.phone },
-  ];
-  const identityFields = [
-    { label: "DATE OF BIRTH", value: profile.dateOfBirth },
-    { label: "PATIENT ID", value: profile.id },
-    { label: "PREFERRED LANGUAGE", value: profile.language },
-  ];
 
   async function runDangerAction() {
     if (!danger) return;
@@ -74,6 +92,7 @@ export function ProfileView() {
         for (const doc of docs) {
           await api().deleteDocument(doc.id);
         }
+        setDocCount(0);
         setStatus("All documents deleted successfully.");
       }
     } catch (caught) {
@@ -85,9 +104,19 @@ export function ProfileView() {
 
   async function runDataAction(id: string) {
     try {
-      if (id === "export") await api().exportAccountData();
-      else await api().listDocuments();
-      setStatus(null);
+      if (id === "export") {
+        const blob = await api().exportAccountData();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `mediguardian-export-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setStatus("Account data exported.");
+      } else {
+        await api().listDocuments();
+        setStatus("Audit logs fetched.");
+      }
     } catch (caught) {
       setStatus(toErrorMessage(caught));
     }
@@ -95,11 +124,14 @@ export function ProfileView() {
 
   async function handleSaveProfile(event: FormEvent) {
     event.preventDefault();
+    if (!profile) return;
     try {
       const updated = await api().updateProfile({
-        fullName: profile.legalName,
-        legalName: profile.legalName,
-        phone: profile.phone,
+        fullName: editForm.fullName,
+        legalName: editForm.fullName,
+        phone: editForm.phone,
+        language: editForm.language,
+        dateOfBirth: editForm.dateOfBirth,
       });
       setProfile(updated);
       setEditing(false);
@@ -108,6 +140,62 @@ export function ProfileView() {
       setStatus(toErrorMessage(caught));
     }
   }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[400px] w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-neutral-500">
+          <Loader2 className="size-6 animate-spin text-brand-600" />
+          <p className="text-sm">Loading user profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !profile) {
+    return (
+      <div className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 px-4">
+        <div className="max-w-md rounded-xl border border-risk-high-border bg-risk-high-bg p-6 text-center">
+          <h3 className="text-base font-semibold text-risk-high">
+            Failed to Load Profile
+          </h3>
+          <p className="mt-2 text-sm text-neutral-700">{error}</p>
+          <Button
+            className="mt-4"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              api()
+                .getProfile()
+                .then((d) => {
+                  setProfile(d);
+                  setLoading(false);
+                })
+                .catch((e) => {
+                  setError(toErrorMessage(e));
+                  setLoading(false);
+                });
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const accountFields = [
+    { label: "FULL NAME", value: profile.legalName || profile.fullName || "—" },
+    { label: "EMAIL", value: profile.email || "—" },
+    { label: "PHONE", value: profile.phone || "—" },
+  ];
+  const identityFields = [
+    { label: "DATE OF BIRTH", value: profile.dateOfBirth || "—" },
+    { label: "PATIENT ID", value: profile.id || "—" },
+    { label: "PREFERRED LANGUAGE", value: profile.language || "English" },
+  ];
 
   return (
     <div className="flex min-h-full w-full flex-col gap-3.5 px-4 py-[22px] md:px-[26px] xl:flex-row xl:items-stretch">
@@ -244,16 +332,30 @@ export function ProfileView() {
           <PanelHeader title="Your data" className="py-3" />
           <div className="flex flex-col gap-3.5 px-[18px] pt-[15px] pb-4">
             <div className="flex w-full gap-3">
-              {dataSummary.map((item) => (
-                <div key={item.label} className="flex flex-1 flex-col gap-0.5">
-                  <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-                    {item.value}
-                  </span>
-                  <span className="type-overline text-neutral-500">
-                    {item.label}
-                  </span>
-                </div>
-              ))}
+              <div className="flex flex-1 flex-col gap-0.5">
+                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
+                  {docCount !== null ? docCount : "—"}
+                </span>
+                <span className="type-overline text-neutral-500">
+                  DOCUMENTS
+                </span>
+              </div>
+              <div className="flex flex-1 flex-col gap-0.5">
+                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
+                  {docCount !== null && docCount > 0 ? "—" : "0"}
+                </span>
+                <span className="type-overline text-neutral-500">
+                  EXTRACTED EVENTS
+                </span>
+              </div>
+              <div className="flex flex-1 flex-col gap-0.5">
+                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
+                  {docCount !== null && docCount > 0 ? "—" : "0"}
+                </span>
+                <span className="type-overline text-neutral-500">
+                  ACTIVE MEDICATIONS
+                </span>
+              </div>
             </div>
 
             {dataActions.map((action) => {
@@ -351,14 +453,15 @@ export function ProfileView() {
             </DialogDescription>
           </div>
           <form className="flex flex-col gap-4" onSubmit={handleSaveProfile}>
-            <Field label="FULL NAME" htmlFor="legalName">
+            <Field label="FULL NAME" htmlFor="fullName">
               <input
-                id="legalName"
-                value={profile.legalName}
+                id="fullName"
+                value={editForm.fullName}
                 onChange={(event) =>
-                  setProfile({ ...profile, legalName: event.target.value })
+                  setEditForm({ ...editForm, fullName: event.target.value })
                 }
                 className={fieldInputClass}
+                placeholder="Enter full name"
               />
             </Field>
             <Field label="EMAIL" htmlFor="profileEmail">
@@ -373,11 +476,12 @@ export function ProfileView() {
             <Field label="PHONE" htmlFor="profilePhone">
               <input
                 id="profilePhone"
-                value={profile.phone}
+                value={editForm.phone}
                 onChange={(event) =>
-                  setProfile({ ...profile, phone: event.target.value })
+                  setEditForm({ ...editForm, phone: event.target.value })
                 }
                 className={fieldInputClass}
+                placeholder="Enter phone number"
               />
             </Field>
             <div className="flex justify-end gap-2.5">

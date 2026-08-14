@@ -6,7 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopBar } from "@/components/app-top-bar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { api } from "@/lib/api";
-import { currentUser, notificationFindings } from "@/lib/data";
+import { notificationFindings } from "@/lib/data";
 import type { UserProfile } from "@/lib/types";
 
 /**
@@ -25,7 +25,11 @@ export function AppShell({
   const [navOpen, setNavOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<
     Pick<UserProfile, "fullName" | "initials" | "accountType">
-  >(currentUser);
+  >({
+    fullName: "Account",
+    initials: "—",
+    accountType: "Patient account",
+  });
 
   useEffect(() => {
     let active = true;
@@ -41,7 +45,7 @@ export function AppShell({
         }
       })
       .catch(() => {
-        // Keeps initial profile if session is loading or not present
+        // Keeps neutral unauthenticated state if unready
       });
     return () => {
       active = false;

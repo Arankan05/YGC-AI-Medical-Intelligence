@@ -11,7 +11,7 @@ import { Panel } from "@/components/panel";
 import { UploadDropzone } from "@/components/upload-dropzone";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { emptyStateMetrics, gettingStartedSteps, currentUser } from "@/lib/data";
+import { emptyStateMetrics, gettingStartedSteps } from "@/lib/data";
 import { stageUploads } from "@/lib/upload-store";
 
 const STEP_ICONS = {
@@ -22,7 +22,7 @@ const STEP_ICONS = {
 
 export function FirstRunView() {
   const router = useRouter();
-  const [userName, setUserName] = useState(currentUser.fullName);
+  const [userName, setUserName] = useState<string>("");
 
   useEffect(() => {
     let active = true;
@@ -54,7 +54,7 @@ export function FirstRunView() {
       >
         <div className="flex min-w-0 flex-1 flex-col gap-[9px]">
           <h2 className="type-display text-sidebar-ink">
-            Welcome, {userName}
+            {userName ? `Welcome, ${userName}` : "Welcome"}
           </h2>
           <p className="text-[15px] leading-6 text-sidebar-ink-muted">
             MediGuardian reads the medical documents you already have —

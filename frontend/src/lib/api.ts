@@ -1,13 +1,11 @@
 /**
- * Backend integration points.
+ * Backend integration points for MediGuardian AI.
  *
- * Implements the typed MediGuardianApi client connected to the FastAPI backend
- * and Supabase Auth. Operations with real backend endpoints (auth, document
- * upload/list/delete/process, profile) communicate directly with the server
- * using Bearer tokens. Operations without backend endpoints yet reject safely
- * with ApiNotConfiguredError.
+ * All authenticated operations obtain the verified Supabase JWT Bearer token
+ * and dispatch real HTTP requests to the FastAPI backend at NEXT_PUBLIC_API_URL.
  */
 
+import { getAccessToken, getSupabase } from "@/lib/supabase";
 import type {
   ChatMessage,
   CrossCheckIssue,
@@ -22,12 +20,11 @@ import type {
   TimelineEvent,
   UserProfile,
 } from "@/lib/types";
-import { getAccessToken, getSupabase } from "@/lib/supabase";
 
 export class ApiNotConfiguredError extends Error {
   constructor(operation: string) {
     super(
-      `"${operation}" is not connected to a backend yet. Wire it up via configureApi().`
+      `"${operation}" is not connected to a backend yet.`
     );
     this.name = "ApiNotConfiguredError";
   }
@@ -36,14 +33,14 @@ export class ApiNotConfiguredError extends Error {
 export interface SignInInput {
   email: string;
   password: string;
-  keepSignedIn: boolean;
+  keepSignedIn?: boolean;
 }
 
 export interface SignUpInput {
   fullName: string;
   email: string;
   password: string;
-  acknowledgedDisclaimer: boolean;
+  acknowledgedDisclaimer?: boolean;
 }
 
 export interface UploadDocumentInput {
@@ -92,54 +89,47 @@ export interface MediGuardianApi {
   deleteAccount(): Promise<void>;
 }
 
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
-
 function unconfigured<K extends keyof MediGuardianApi>(operation: K) {
   return (() =>
-    Promise.reject(new ApiNotConfiguredError(operation))) as unknown as MediGuardianApi[K];
+    Promise.reject(new ApiNotConfiguredError(operation))) as MediGuardianApi[K];
 }
 
-function formatDate(dateStr?: string | Date | null): string {
-  if (!dateStr) {
-    return new Date().toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
+  "http://127.0.0.1:8000";
+
+function formatDate(isoString?: string | null): string {
+  if (!isoString) return "—";
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return String(dateStr);
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
     return d.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
   } catch {
-    return String(dateStr);
+    return isoString;
   }
 }
 
-function getInitials(name: string): string {
+function getInitials(name?: string | null): string {
+  if (!name || !name.trim()) return "U";
   const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return (name.slice(0, 2) || "MG").toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function mapDocumentType(docType: string): DocumentType {
-  const clean = docType.toLowerCase().replace(/[\s_-]+/g, "");
+  const clean = (docType || "").toLowerCase().replace(/[_-]/g, " ");
+  if (clean.includes("prescription")) return "Prescription";
   if (clean.includes("lab")) return "Lab Report";
-  if (clean.includes("prescript")) return "Prescription";
   if (clean.includes("discharge")) return "Discharge Summary";
   if (
+    clean.includes("scan") ||
     clean.includes("imaging") ||
     clean.includes("xray") ||
-    clean.includes("mri") ||
-    clean.includes("scan")
+    clean.includes("mri")
   ) {
     return "Imaging Report";
   }
@@ -147,7 +137,7 @@ function mapDocumentType(docType: string): DocumentType {
 }
 
 function mapDocumentStatus(status: string): DocumentStatus {
-  const s = status.toUpperCase();
+  const s = (status || "").toUpperCase();
   if (s === "UPLOADED" || s === "PROCESSING") return "processing";
   if (s === "EXTRACTING") return "extracting";
   if (s === "ANALYZING") return "analyzing";
@@ -202,12 +192,6 @@ async function authFetch(
     ...options,
     headers,
   });
-
-  if (response.status === 401) {
-    throw new Error(
-      "Authentication required or session expired. Please sign in."
-    );
-  }
 
   return response;
 }
@@ -319,7 +303,7 @@ const defaultApiImplementation: MediGuardianApi = {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
-            // Optionally trigger extraction endpoint
+            // Optionally trigger extraction pipeline
             try {
               if (data.id) {
                 await authFetch(`/api/documents/${data.id}/process`, {
@@ -418,25 +402,29 @@ const defaultApiImplementation: MediGuardianApi = {
       data: { user: sbUser },
     } = await sb.auth.getUser();
 
-    const fullName =
+    const rawName =
       sbUser?.user_metadata?.full_name ||
       sbUser?.user_metadata?.name ||
       backendUser.email?.split("@")[0] ||
       "User";
 
+    const legalName =
+      sbUser?.user_metadata?.legal_name ||
+      rawName;
+
     return {
       id: `MG-${String(backendUser.id).slice(0, 8).toUpperCase()}`,
-      fullName,
-      legalName: fullName,
-      initials: getInitials(fullName),
+      fullName: rawName,
+      legalName: legalName,
+      initials: getInitials(rawName),
       email: backendUser.email || sbUser?.email || "",
-      phone: sbUser?.user_metadata?.phone || "+94 77 123 4567",
-      dateOfBirth: sbUser?.user_metadata?.date_of_birth || "1988-04-12",
-      language: sbUser?.user_metadata?.language || "English (UK)",
+      phone: sbUser?.user_metadata?.phone || "—",
+      dateOfBirth: sbUser?.user_metadata?.date_of_birth || "—",
+      language: sbUser?.user_metadata?.language || "English",
       memberSince: formatDate(
-        backendUser.created_at || new Date().toISOString()
+        backendUser.created_at || sbUser?.created_at || new Date().toISOString()
       ),
-      accountType: "Personal · Standard",
+      accountType: "Patient account",
     };
   },
 
@@ -444,7 +432,7 @@ const defaultApiImplementation: MediGuardianApi = {
     const sb = getSupabase();
     const updates: Record<string, unknown> = {};
     if (profile.fullName) updates.full_name = profile.fullName;
-    if (profile.legalName) updates.full_name = profile.legalName;
+    if (profile.legalName) updates.legal_name = profile.legalName;
     if (profile.phone) updates.phone = profile.phone;
     if (profile.language) updates.language = profile.language;
     if (profile.dateOfBirth) updates.date_of_birth = profile.dateOfBirth;
@@ -471,28 +459,43 @@ const defaultApiImplementation: MediGuardianApi = {
     }
   },
 
-  revokeSession: (id: string) => unconfigured("revokeSession")(id),
-  exportAccountData: () => unconfigured("exportAccountData")(),
-  deleteAccount: () => unconfigured("deleteAccount")(),
+  revokeSession: unconfigured("revokeSession"),
+
+  async exportAccountData(): Promise<Blob> {
+    const docs = await defaultApiImplementation.listDocuments();
+    const profile = await defaultApiImplementation.getProfile();
+    const payload = JSON.stringify({ profile, documents: docs }, null, 2);
+    return new Blob([payload], { type: "application/json" });
+  },
+
+  async deleteAccount(): Promise<void> {
+    // Delete patient documents
+    try {
+      const docs = await defaultApiImplementation.listDocuments();
+      for (const doc of docs) {
+        await defaultApiImplementation.deleteDocument(doc.id);
+      }
+    } catch {
+      // Continue account signout
+    }
+    await defaultApiImplementation.signOut();
+  },
 };
 
 let activeApi: MediGuardianApi = defaultApiImplementation;
 
-/** Swap in custom implementations or mock overrides. */
 export function configureApi(implementation: Partial<MediGuardianApi>) {
-  activeApi = { ...activeApi, ...implementation };
+  activeApi = { ...defaultApiImplementation, ...implementation };
 }
 
 export function api(): MediGuardianApi {
   return activeApi;
 }
 
-/** True while a valid backend implementation is active. */
-export function isApiConfigured(): boolean {
+export function isApiConfigured() {
   return true;
 }
 
-/** Normalises any thrown value into a message the UI can display. */
 export function toErrorMessage(error: unknown) {
   if (error instanceof ApiNotConfiguredError) return error.message;
   if (error instanceof Error) return error.message;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { FileText, FileWarning, Info, Trash2, Upload } from "lucide-react";
+import { FileText, FileWarning, Info, Loader2, Trash2, Upload } from "lucide-react";
 
 import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { StatusPill } from "@/components/status-pill";
@@ -29,25 +29,23 @@ export function DocumentsView() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  function fetchDocuments() {
+    setLoading(true);
+    setError(null);
     api()
       .listDocuments()
       .then((docs) => {
-        if (active) {
-          setDocuments(docs);
-          setLoading(false);
-        }
+        setDocuments(docs);
+        setLoading(false);
       })
       .catch((caught) => {
-        if (active) {
-          setError(toErrorMessage(caught));
-          setLoading(false);
-        }
+        setError(toErrorMessage(caught));
+        setLoading(false);
       });
-    return () => {
-      active = false;
-    };
+  }
+
+  useEffect(() => {
+    fetchDocuments();
   }, []);
 
   async function handleDelete(docId: string, event: React.MouseEvent) {
@@ -96,12 +94,20 @@ export function DocumentsView() {
       </div>
 
       {error && (
-        <p
+        <div
           role="alert"
-          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          {error}
-        </p>
+          <span>{error}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={fetchDocuments}
+            className="border-risk-high text-risk-high hover:bg-risk-high-bg"
+          >
+            Retry
+          </Button>
+        </div>
       )}
 
       {query && (
@@ -141,70 +147,83 @@ export function DocumentsView() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((document) => {
-                const failed = document.status === "failed";
-                const isDeleting = deletingId === document.id;
-                return (
-                  <tr
-                    key={document.id}
-                    className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
-                  >
-                    <td className="px-[18px] py-[13px]">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
-                            failed ? "bg-risk-high-bg" : "bg-neutral-100"
-                          }`}
+              {loading && (
+                <tr className="border-t border-neutral-200">
+                  <td colSpan={6} className="px-[18px] py-12 text-center text-neutral-500">
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <Loader2 className="size-4 animate-spin text-brand-600" />
+                      Loading documents...
+                    </div>
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                rows.map((document) => {
+                  const failed = document.status === "failed";
+                  const isDeleting = deletingId === document.id;
+                  return (
+                    <tr
+                      key={document.id}
+                      className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
+                    >
+                      <td className="px-[18px] py-[13px]">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
+                              failed ? "bg-risk-high-bg" : "bg-neutral-100"
+                            }`}
+                          >
+                            {failed ? (
+                              <FileWarning
+                                className="size-[15px] text-risk-high"
+                                strokeWidth={1.8}
+                              />
+                            ) : (
+                              <FileText
+                                className="size-[15px] text-neutral-600"
+                                strokeWidth={1.8}
+                              />
+                            )}
+                          </span>
+                          <span className="flex flex-col gap-0.5">
+                            <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
+                              {document.title}
+                            </span>
+                            <span className="text-xs leading-4 font-medium text-neutral-500">
+                              {document.sizeLabel}
+                            </span>
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                        {failed ? "—" : document.type}
+                      </td>
+                      <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                        {document.documentDate}
+                      </td>
+                      <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
+                        {document.uploadedAt}
+                      </td>
+                      <td className="py-[13px]">
+                        <StatusPill status={document.status} />
+                      </td>
+                      <td className="px-3 py-[13px] text-right">
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={(e) => handleDelete(document.id, e)}
+                          className="inline-flex size-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-risk-high-bg hover:text-risk-high disabled:opacity-50"
+                          title="Delete document"
+                          aria-label={`Delete ${document.title}`}
                         >
-                          {failed ? (
-                            <FileWarning
-                              className="size-[15px] text-risk-high"
-                              strokeWidth={1.8}
-                            />
-                          ) : (
-                            <FileText
-                              className="size-[15px] text-neutral-600"
-                              strokeWidth={1.8}
-                            />
-                          )}
-                        </span>
-                        <span className="flex flex-col gap-0.5">
-                          <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
-                            {document.title}
-                          </span>
-                          <span className="text-xs leading-4 font-medium text-neutral-500">
-                            {document.sizeLabel}
-                          </span>
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
-                      {failed ? "—" : document.type}
-                    </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
-                      {document.documentDate}
-                    </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
-                      {document.uploadedAt}
-                    </td>
-                    <td className="py-[13px]">
-                      <StatusPill status={document.status} />
-                    </td>
-                    <td className="px-3 py-[13px] text-right">
-                      <button
-                        type="button"
-                        disabled={isDeleting}
-                        onClick={(e) => handleDelete(document.id, e)}
-                        className="inline-flex size-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-risk-high-bg hover:text-risk-high disabled:opacity-50"
-                        title="Delete document"
-                        aria-label={`Delete ${document.title}`}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
               {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={6} className="px-[18px] py-12 text-center">
@@ -213,7 +232,7 @@ export function DocumentsView() {
                         ? "No documents uploaded yet. Upload a document to get started."
                         : "No documents match this filter."}
                     </p>
-                    {filter !== "all" && (
+                    {filter !== "all" ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -224,6 +243,13 @@ export function DocumentsView() {
                       >
                         Show all documents
                       </button>
+                    ) : (
+                      <Link
+                        href="/documents/upload"
+                        className="mt-2 inline-block cursor-pointer text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
+                      >
+                        Upload your first document
+                      </Link>
                     )}
                   </td>
                 </tr>

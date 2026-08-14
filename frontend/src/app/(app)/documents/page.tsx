@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { AppShell } from "@/components/app-shell";
-import { recordTotals } from "@/lib/data";
-
 import { DocumentsView } from "./documents-view";
 
 export const metadata: Metadata = {
@@ -15,7 +13,7 @@ export default function DocumentsPage() {
   return (
     <AppShell
       title="Documents"
-      subtitle={`${recordTotals.documents} documents from ${recordTotals.providers} providers · ${recordTotals.visits} visits`}
+      subtitle="View and manage your uploaded medical records"
     >
       <Suspense fallback={null}>
         <DocumentsView />
