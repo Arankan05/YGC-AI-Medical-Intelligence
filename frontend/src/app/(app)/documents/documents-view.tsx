@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { FileText, FileWarning, Info, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FileText, FileWarning, Info, Trash2, Upload } from "lucide-react";
 
 import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { documents } from "@/lib/data";
-import type { DocumentType } from "@/lib/types";
+import { api, toErrorMessage } from "@/lib/api";
+import type { DocumentType, MedicalDocument } from "@/lib/types";
 
 const CHIPS: FilterChip[] = [
   { value: "all", label: "All documents" },
@@ -24,6 +24,45 @@ export function DocumentsView() {
   const searchParams = useSearchParams();
   const query = (searchParams.get("q") ?? "").trim().toLowerCase();
   const [filter, setFilter] = useState<DocumentType | "all">("all");
+  const [documents, setDocuments] = useState<MedicalDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api()
+      .listDocuments()
+      .then((docs) => {
+        if (active) {
+          setDocuments(docs);
+          setLoading(false);
+        }
+      })
+      .catch((caught) => {
+        if (active) {
+          setError(toErrorMessage(caught));
+          setLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleDelete(docId: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    if (!confirm("Are you sure you want to delete this medical document?")) return;
+    setDeletingId(docId);
+    try {
+      await api().deleteDocument(docId);
+      setDocuments((current) => current.filter((d) => d.id !== docId));
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const rows = useMemo(
     () =>
@@ -37,7 +76,7 @@ export function DocumentsView() {
             .includes(query);
         return matchesFilter && matchesQuery;
       }),
-    [filter, query]
+    [documents, filter, query]
   );
 
   return (
@@ -55,6 +94,15 @@ export function DocumentsView() {
           Upload documents
         </Button>
       </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+        >
+          {error}
+        </p>
+      )}
 
       {query && (
         <p className="text-[13px] leading-[19px] text-neutral-500">
@@ -87,11 +135,15 @@ export function DocumentsView() {
                 <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
                   STATUS
                 </th>
+                <th className="type-overline w-[70px] px-3 py-3 text-right text-neutral-500">
+                  ACTION
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((document) => {
                 const failed = document.status === "failed";
+                const isDeleting = deletingId === document.id;
                 return (
                   <tr
                     key={document.id}
@@ -138,25 +190,41 @@ export function DocumentsView() {
                     <td className="py-[13px]">
                       <StatusPill status={document.status} />
                     </td>
+                    <td className="px-3 py-[13px] text-right">
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={(e) => handleDelete(document.id, e)}
+                        className="inline-flex size-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-risk-high-bg hover:text-risk-high disabled:opacity-50"
+                        title="Delete document"
+                        aria-label={`Delete ${document.title}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
-              {rows.length === 0 && (
+              {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
-                  <td colSpan={5} className="px-[18px] py-12 text-center">
+                  <td colSpan={6} className="px-[18px] py-12 text-center">
                     <p className="text-sm leading-[21px] text-neutral-600">
-                      No documents match this filter.
+                      {filter === "all"
+                        ? "No documents uploaded yet. Upload a document to get started."
+                        : "No documents match this filter."}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFilter("all");
-                        router.push("/documents");
-                      }}
-                      className="mt-2 cursor-pointer text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
-                    >
-                      Show all documents
-                    </button>
+                    {filter !== "all" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilter("all");
+                          router.push("/documents");
+                        }}
+                        className="mt-2 cursor-pointer text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
+                      >
+                        Show all documents
+                      </button>
+                    )}
                   </td>
                 </tr>
               )}

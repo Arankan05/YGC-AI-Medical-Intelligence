@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Panel } from "@/components/panel";
 import { UploadDropzone } from "@/components/upload-dropzone";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { emptyStateMetrics, gettingStartedSteps, currentUser } from "@/lib/data";
 import { stageUploads } from "@/lib/upload-store";
 
@@ -20,6 +22,20 @@ const STEP_ICONS = {
 
 export function FirstRunView() {
   const router = useRouter();
+  const [userName, setUserName] = useState(currentUser.fullName);
+
+  useEffect(() => {
+    let active = true;
+    api()
+      .getProfile()
+      .then((p) => {
+        if (active) setUserName(p.fullName);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function handleFiles(files: File[]) {
     stageUploads(files);
@@ -38,7 +54,7 @@ export function FirstRunView() {
       >
         <div className="flex min-w-0 flex-1 flex-col gap-[9px]">
           <h2 className="type-display text-sidebar-ink">
-            Welcome, {currentUser.fullName}
+            Welcome, {userName}
           </h2>
           <p className="text-[15px] leading-6 text-sidebar-ink-muted">
             MediGuardian reads the medical documents you already have —

@@ -61,9 +61,24 @@ class SupabaseStorageService:
                 self._settings.SUPABASE_URL,
                 self._settings.SUPABASE_KEY,
             )
+            self._ensure_bucket()
         except Exception as e:
             logger.error("Failed to initialize Supabase storage client: %s", type(e).__name__)
             raise StorageError("Could not initialize secure storage service connection.") from None
+
+    def _ensure_bucket(self) -> None:
+        """Ensures the configured private storage bucket exists, creating it if needed."""
+        try:
+            self._client.storage.get_bucket(self._bucket_name)
+        except Exception:
+            try:
+                self._client.storage.create_bucket(
+                    self._bucket_name,
+                    options={"public": False},
+                )
+                logger.info("Created private storage bucket '%s'", self._bucket_name)
+            except Exception as create_err:
+                logger.debug("Bucket verification/creation status: %s", type(create_err).__name__)
 
     @property
     def bucket_name(self) -> str:

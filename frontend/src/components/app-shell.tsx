@@ -1,11 +1,13 @@
 "use client";
 
-import { Suspense, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopBar } from "@/components/app-top-bar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { api } from "@/lib/api";
 import { currentUser, notificationFindings } from "@/lib/data";
+import type { UserProfile } from "@/lib/types";
 
 /**
  * Figma: ⚙ Shell Template (node 23:134) — App Sidebar + App Top Bar + content.
@@ -21,10 +23,34 @@ export function AppShell({
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<
+    Pick<UserProfile, "fullName" | "initials" | "accountType">
+  >(currentUser);
+
+  useEffect(() => {
+    let active = true;
+    api()
+      .getProfile()
+      .then((profile) => {
+        if (active) {
+          setUserProfile({
+            fullName: profile.fullName,
+            initials: profile.initials,
+            accountType: profile.accountType,
+          });
+        }
+      })
+      .catch(() => {
+        // Keeps initial profile if session is loading or not present
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="flex h-dvh w-full items-start overflow-hidden bg-neutral-50">
-      <AppSidebar user={currentUser} className="hidden lg:flex" />
+      <AppSidebar user={userProfile} className="hidden lg:flex" />
 
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
         <SheetContent
@@ -33,13 +59,15 @@ export function AppShell({
           className="w-[248px] gap-0 border-0 p-0 sm:max-w-[248px]"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <AppSidebar user={currentUser} onNavigate={() => setNavOpen(false)} />
+          <AppSidebar user={userProfile} onNavigate={() => setNavOpen(false)} />
         </SheetContent>
       </Sheet>
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <Suspense
-          fallback={<div className="h-[72px] w-full border-b border-neutral-200 bg-neutral-0" />}
+          fallback={
+            <div className="h-[72px] w-full border-b border-neutral-200 bg-neutral-0" />
+          }
         >
           <AppTopBar
             title={title}

@@ -11,6 +11,7 @@ from supabase_auth.errors import AuthApiError
 
 from app.core.config import Settings, get_settings
 from app.db.database import get_db
+from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.auth import AuthenticatedUser
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Download, FileClock, Lock, Monitor, Smartphone } from "lucide-react";
 
 import { Field, fieldInputClass } from "@/components/field";
@@ -37,6 +37,21 @@ export function ProfileView() {
   const [danger, setDanger] = useState<DangerAction>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    api()
+      .getProfile()
+      .then((data) => {
+        if (active) setProfile(data);
+      })
+      .catch(() => {
+        // Fall back gracefully if session is unready
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const accountFields = [
     { label: "FULL NAME", value: profile.legalName },
     { label: "EMAIL", value: profile.email },
@@ -51,9 +66,16 @@ export function ProfileView() {
   async function runDangerAction() {
     if (!danger) return;
     try {
-      if (danger === "account") await api().deleteAccount();
-      else await api().deleteDocument("all");
-      setStatus(null);
+      if (danger === "account") {
+        await api().deleteAccount();
+        setStatus("Account deletion requested.");
+      } else {
+        const docs = await api().listDocuments();
+        for (const doc of docs) {
+          await api().deleteDocument(doc.id);
+        }
+        setStatus("All documents deleted successfully.");
+      }
     } catch (caught) {
       setStatus(toErrorMessage(caught));
     } finally {
@@ -66,6 +88,22 @@ export function ProfileView() {
       if (id === "export") await api().exportAccountData();
       else await api().listDocuments();
       setStatus(null);
+    } catch (caught) {
+      setStatus(toErrorMessage(caught));
+    }
+  }
+
+  async function handleSaveProfile(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const updated = await api().updateProfile({
+        fullName: profile.legalName,
+        legalName: profile.legalName,
+        phone: profile.phone,
+      });
+      setProfile(updated);
+      setEditing(false);
+      setStatus("Profile updated successfully.");
     } catch (caught) {
       setStatus(toErrorMessage(caught));
     }
@@ -312,13 +350,7 @@ export function ProfileView() {
               Changes are saved to your account only.
             </DialogDescription>
           </div>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setEditing(false);
-            }}
-          >
+          <form className="flex flex-col gap-4" onSubmit={handleSaveProfile}>
             <Field label="FULL NAME" htmlFor="legalName">
               <input
                 id="legalName"
@@ -333,11 +365,9 @@ export function ProfileView() {
               <input
                 id="profileEmail"
                 type="email"
+                disabled
                 value={profile.email}
-                onChange={(event) =>
-                  setProfile({ ...profile, email: event.target.value })
-                }
-                className={fieldInputClass}
+                className={`${fieldInputClass} opacity-70 cursor-not-allowed`}
               />
             </Field>
             <Field label="PHONE" htmlFor="profilePhone">
@@ -355,7 +385,6 @@ export function ProfileView() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setProfile(currentUser);
                   setEditing(false);
                 }}
               >

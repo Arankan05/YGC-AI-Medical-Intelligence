@@ -18,7 +18,10 @@ export function UploadModalRoute() {
       initialFiles={initialFiles}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) router.push("/documents");
+        if (!next) {
+          router.push("/documents");
+          router.refresh();
+        }
       }}
     />
   );
