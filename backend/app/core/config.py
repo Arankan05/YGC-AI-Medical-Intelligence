@@ -28,7 +28,11 @@ class Settings(BaseSettings):
     )
     SUPABASE_KEY: str = Field(
         default="",
-        description="Supabase API / Service Role Key",
+        description="Supabase API / Anon Key",
+    )
+    SUPABASE_SERVICE_KEY: Optional[str] = Field(
+        default=None,
+        description="Supabase service_role key for server-side private storage and admin operations",
     )
     SUPABASE_JWT_SECRET: Optional[str] = Field(
         default=None,
