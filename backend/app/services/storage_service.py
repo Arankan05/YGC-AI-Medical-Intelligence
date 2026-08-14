@@ -1,9 +1,9 @@
-
-
 import logging
+import time
 from functools import lru_cache
 from typing import Optional, Union
 
+import jwt
 from supabase import Client, create_client
 
 from app.core.config import Settings, get_settings
@@ -46,6 +46,37 @@ class StorageDeleteError(StorageError):
     pass
 
 
+def _resolve_storage_key(settings: Settings) -> str:
+    """
+    Resolves the appropriate key for server-side private Supabase Storage operations:
+    1. Returns SUPABASE_SERVICE_KEY if explicitly configured.
+    2. If SUPABASE_JWT_SECRET is configured, derives a signed service_role JWT.
+    3. Falls back to SUPABASE_KEY.
+    """
+    if settings.SUPABASE_SERVICE_KEY and settings.SUPABASE_SERVICE_KEY.strip():
+        return settings.SUPABASE_SERVICE_KEY.strip()
+
+    if settings.SUPABASE_JWT_SECRET and settings.SUPABASE_URL:
+        try:
+            # Extract project ref from URL (e.g. 'fkpppzbzbvrgqbkeauzv')
+            project_ref = settings.SUPABASE_URL.split("://")[-1].split(".")[0]
+            now = int(time.time())
+            payload = {
+                "iss": "supabase",
+                "ref": project_ref,
+                "role": "service_role",
+                "iat": now,
+                "exp": now + (10 * 365 * 24 * 3600),  # 10 years
+            }
+            derived_key = jwt.encode(payload, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
+            logger.info("Derived server-side service_role key from SUPABASE_JWT_SECRET for storage operations.")
+            return derived_key
+        except Exception as e:
+            logger.debug("Could not derive service_role key: %s", type(e).__name__)
+
+    return settings.SUPABASE_KEY
+
+
 class SupabaseStorageService:
     """
     Independent service for interacting with private Supabase Storage buckets.
@@ -59,9 +90,10 @@ class SupabaseStorageService:
         self._max_file_size = self._settings.STORAGE_MAX_FILE_SIZE_BYTES
 
         try:
+            storage_key = _resolve_storage_key(self._settings)
             self._client: Client = create_client(
                 self._settings.SUPABASE_URL,
-                self._settings.SUPABASE_KEY,
+                storage_key,
             )
             self._ensure_bucket()
         except Exception as e:
@@ -119,14 +151,24 @@ class SupabaseStorageService:
         if not file_bytes:
             raise StorageUploadError("Cannot upload an empty file.")
 
-        if len(file_bytes) > self._max_file_size:
+        file_size = len(file_bytes)
+        if file_size > self._max_file_size:
             raise StorageFileTooLargeError(
-                f"File size ({len(file_bytes)} bytes) exceeds maximum permitted limit ({self._max_file_size} bytes)."
+                f"File size ({file_size} bytes) exceeds maximum permitted limit ({self._max_file_size} bytes)."
             )
 
         storage_path = storage_path.strip().lstrip("/")
         if not storage_path:
             raise StorageUploadError("Invalid or empty storage path specified.")
+
+        logger.info(
+            "Executing storage UPLOAD (bucket=%s, path=%s, size=%d bytes, content_type=%s, upsert=%s)",
+            self._bucket_name,
+            storage_path,
+            file_size,
+            content_type,
+            upsert,
+        )
 
         try:
             if not upsert and self.exists(storage_path):
@@ -145,12 +187,19 @@ class SupabaseStorageService:
                 file=file_bytes,
                 file_options=file_options,
             )
+            logger.info("Storage UPLOAD succeeded for path '%s'", storage_path)
             return storage_path
 
         except (StorageFileTooLargeError, StorageFileAlreadyExistsError, StorageUploadError):
             raise
         except Exception as e:
-            logger.error("Storage upload failed for path '%s': %s", storage_path, type(e).__name__)
+            logger.error(
+                "Storage UPLOAD failed for bucket '%s', path '%s': %s (%s)",
+                self._bucket_name,
+                storage_path,
+                type(e).__name__,
+                getattr(e, "message", str(e)),
+            )
             raise StorageUploadError("Failed to upload document to storage.") from None
 
     def download_file(self, storage_path: str) -> bytes:
@@ -171,15 +220,27 @@ class SupabaseStorageService:
         if not storage_path:
             raise StorageDownloadError("Invalid or empty storage path specified.")
 
+        logger.info(
+            "Executing storage DOWNLOAD (bucket=%s, path=%s)",
+            self._bucket_name,
+            storage_path,
+        )
+
         try:
             data = self._client.storage.from_(self._bucket_name).download(storage_path)
             if data is None:
                 raise StorageFileNotFoundError(f"File '{storage_path}' not found in storage.")
+            logger.info("Storage DOWNLOAD succeeded for path '%s' (%d bytes)", storage_path, len(data))
             return data
         except StorageFileNotFoundError:
             raise
         except Exception as e:
-            logger.error("Storage download failed for path '%s': %s", storage_path, type(e).__name__)
+            logger.error(
+                "Storage DOWNLOAD failed for bucket '%s', path '%s': %s",
+                self._bucket_name,
+                storage_path,
+                type(e).__name__,
+            )
             raise StorageDownloadError("Failed to download document from storage.") from None
 
     def delete_file(self, storage_path: str) -> bool:
@@ -199,27 +260,35 @@ class SupabaseStorageService:
         if not storage_path:
             raise StorageDeleteError("Invalid or empty storage path specified.")
 
+        logger.info(
+            "Executing storage DELETE (bucket=%s, path=%s)",
+            self._bucket_name,
+            storage_path,
+        )
+
         try:
             self._client.storage.from_(self._bucket_name).remove([storage_path])
+            logger.info("Storage DELETE succeeded for path '%s'", storage_path)
             return True
         except Exception as e:
-            logger.error("Storage delete failed for path '%s': %s", storage_path, type(e).__name__)
+            logger.error(
+                "Storage DELETE failed for bucket '%s', path '%s': %s",
+                self._bucket_name,
+                storage_path,
+                type(e).__name__,
+            )
             raise StorageDeleteError("Failed to delete document from storage.") from None
 
-    def create_signed_url(
-        self,
-        storage_path: str,
-        expires_in: int = 3600,
-    ) -> str:
+    def get_signed_url(self, storage_path: str, expires_in_seconds: int = 3600) -> str:
         """
-        Generates a time-bounded signed download URL for private documents.
+        Generates a secure, time-limited signed URL for authorized access to a private document.
 
         Args:
             storage_path: Path/key of the file in the bucket.
-            expires_in: Expiry duration in seconds (default: 3600 = 1 hour).
+            expires_in_seconds: URL expiration window in seconds (default: 3600s / 1 hour).
 
         Returns:
-            A secure signed URL string.
+            Secure signed URL string.
 
         Raises:
             StorageError: If signed URL generation fails.
@@ -229,37 +298,26 @@ class SupabaseStorageService:
             raise StorageError("Invalid or empty storage path specified.")
 
         try:
-            response = self._client.storage.from_(self._bucket_name).create_signed_url(
+            result = self._client.storage.from_(self._bucket_name).create_signed_url(
                 path=storage_path,
-                expires_in=expires_in,
+                expires_in=expires_in_seconds,
             )
-
-            # Support both dict and object response formats from storage3 / supabase-py
-            if isinstance(response, dict):
-                signed_url = response.get("signedURL") or response.get("signedUrl")
-            elif hasattr(response, "signed_url"):
-                signed_url = getattr(response, "signed_url")
-            elif hasattr(response, "signedURL"):
-                signed_url = getattr(response, "signedURL")
-            else:
-                signed_url = str(response)
-
+            signed_url = result.get("signedURL") or result.get("signedUrl")
             if not signed_url:
-                raise StorageError("Signed URL was not returned by storage provider.")
-
+                raise StorageError("Signed URL was not returned by storage service.")
             return signed_url
         except StorageError:
             raise
         except Exception as e:
-            logger.error("Signed URL generation failed for path '%s': %s", storage_path, type(e).__name__)
-            raise StorageError("Failed to generate secure access URL for document.") from None
+            logger.error("Failed to generate signed URL for path '%s': %s", storage_path, type(e).__name__)
+            raise StorageError("Could not generate secure access URL for document.") from None
 
     def exists(self, storage_path: str) -> bool:
         """
-        Checks whether a file exists at the given path in the bucket.
+        Checks whether a file exists in the private storage bucket.
 
         Args:
-            storage_path: Path/key to verify.
+            storage_path: Path/key of the file to check.
 
         Returns:
             True if file exists, False otherwise.
@@ -269,9 +327,11 @@ class SupabaseStorageService:
             return False
 
         try:
-            return self._client.storage.from_(self._bucket_name).exists(storage_path)
-        except Exception as e:
-            logger.warning("Storage exists check failed for path '%s': %s", storage_path, type(e).__name__)
+            folder = "/".join(storage_path.split("/")[:-1]) if "/" in storage_path else ""
+            filename = storage_path.split("/")[-1]
+            files = self._client.storage.from_(self._bucket_name).list(folder)
+            return any(f.get("name") == filename for f in files if isinstance(f, dict))
+        except Exception:
             return False
 
 
