@@ -1,3 +1,14 @@
+from app.services.ai import (
+    AIAuthenticationError,
+    AIRateLimitError,
+    AIResponseParseError,
+    AIServiceError,
+    BaseAIProvider,
+    GeminiAIProvider,
+    MockAIProvider,
+    get_ai_provider,
+    set_ai_provider,
+)
 from app.services.document_processing_service import (
     DocumentProcessResult,
     DocumentProcessingService,
@@ -9,6 +20,14 @@ from app.services.document_processor import (
     DocumentProcessor,
     get_document_processor,
     process_document,
+)
+from app.services.medical_extraction_service import (
+    MedicalExtractionService,
+    get_medical_extraction_service,
+)
+from app.services.medical_persistence_service import (
+    MedicalPersistenceService,
+    get_medical_persistence_service,
 )
 from app.services.ocr_service import (
     ImageOCRResult,
@@ -78,6 +97,21 @@ __all__ = [
     "StorageUploadError",
     "SupabaseStorageService",
     "get_storage_service",
+
+    "BaseAIProvider",
+    "GeminiAIProvider",
+    "MockAIProvider",
+    "AIServiceError",
+    "AIAuthenticationError",
+    "AIRateLimitError",
+    "AIResponseParseError",
+    "get_ai_provider",
+    "set_ai_provider",
+
+    "MedicalExtractionService",
+    "get_medical_extraction_service",
+    "MedicalPersistenceService",
+    "get_medical_persistence_service",
 ]
 
 

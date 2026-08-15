@@ -11,11 +11,21 @@ from sqlalchemy.orm import Session
 from app.models.document import Document
 from app.models.patient import Patient
 from app.models.user import User
+from app.schemas.extraction import MedicalExtractionResponse
+from app.services.ai.base_provider import AIServiceError
 from app.services.document_processor import (
     DocumentProcessingError,
     DocumentProcessingResult,
     DocumentProcessor,
     get_document_processor,
+)
+from app.services.medical_extraction_service import (
+    MedicalExtractionService,
+    get_medical_extraction_service,
+)
+from app.services.medical_persistence_service import (
+    MedicalPersistenceService,
+    get_medical_persistence_service,
 )
 from app.services.ocr_service import OCRError
 from app.services.pdf_extractor import InvalidPDFError
@@ -64,15 +74,20 @@ class DocumentProcessingService:
     2. Downloads private document binary content from Supabase Storage.
     3. Executes text extraction via DocumentProcessor (PyMuPDF with Tesseract OCR fallback).
     4. Updates database processing_status, processed_at, and error_message.
+    5. Optionally extracts and persists structured clinical entities via MedicalExtractionService and MedicalPersistenceService.
     """
 
     def __init__(
         self,
         storage_service: Optional[SupabaseStorageService] = None,
         document_processor: Optional[DocumentProcessor] = None,
+        medical_extraction_service: Optional[MedicalExtractionService] = None,
+        medical_persistence_service: Optional[MedicalPersistenceService] = None,
     ):
         self._storage_service = storage_service
         self._document_processor = document_processor
+        self._medical_extraction_service = medical_extraction_service
+        self._medical_persistence_service = medical_persistence_service
 
     @property
     def storage_service(self) -> SupabaseStorageService:
@@ -85,6 +100,18 @@ class DocumentProcessingService:
         if self._document_processor is None:
             self._document_processor = get_document_processor()
         return self._document_processor
+
+    @property
+    def medical_extraction_service(self) -> MedicalExtractionService:
+        if self._medical_extraction_service is None:
+            self._medical_extraction_service = get_medical_extraction_service()
+        return self._medical_extraction_service
+
+    @property
+    def medical_persistence_service(self) -> MedicalPersistenceService:
+        if self._medical_persistence_service is None:
+            self._medical_persistence_service = get_medical_persistence_service()
+        return self._medical_persistence_service
 
     def process_user_document(
         self,
@@ -236,6 +263,102 @@ class DocumentProcessingService:
             has_text=proc_result.has_text,
             confidence=proc_result.confidence,
             processed_at=proc_at,
+        )
+
+    def extract_user_document(
+        self,
+        user: User,
+        document_id: UUID,
+        db: Session,
+    ) -> MedicalExtractionResponse:
+        """
+        Extracts structured clinical information from a processed document and persists into database.
+        If document has not yet been processed for text extraction, it executes text extraction first.
+
+        Args:
+            user: Authenticated User entity.
+            document_id: UUID of the document to extract.
+            db: Active SQLAlchemy database session.
+
+        Returns:
+            MedicalExtractionResponse containing structured clinical entities and persisted entity counts.
+        """
+        # 1. Resolve Patient Profile
+        patient = db.query(Patient).filter(Patient.user_id == user.id).first()
+        if not patient:
+            logger.warning("Patient profile not found for user %s", user.id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No patient profile found for the authenticated user.",
+            )
+
+        # 2. Retrieve Document Record
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found.",
+            )
+
+        # 3. Enforce Strict Tenant & Ownership Isolation
+        if document.patient_id != patient.id:
+            logger.warning(
+                "Unauthorized extract attempt on document %s by user %s (patient %s)",
+                document_id,
+                user.id,
+                patient.id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to process this document.",
+            )
+
+        # 4. If text has not been extracted yet, trigger text extraction pipeline
+        if not document.extracted_text or document.processing_status != "COMPLETED":
+            self.process_user_document(user=user, document_id=document_id, db=db)
+            db.refresh(document)
+
+        # 5. Extract structured medical entities via AI
+        try:
+            extracted_record = self.medical_extraction_service.extract_from_text(document.extracted_text)
+        except AIServiceError as ae:
+            logger.error("AI extraction error for document %s: %s", document_id, str(ae))
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"AI medical extraction failed: {str(ae)}",
+            )
+        except Exception as e:
+            logger.error("Unexpected failure during AI extraction for %s: %s", document_id, str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to extract medical information from document.",
+            )
+
+        # 6. Persist structured entities into SQLAlchemy models
+        doc_uuid = document.id if isinstance(document.id, UUID) else UUID(str(document.id))
+        pat_uuid = patient.id if isinstance(patient.id, UUID) else UUID(str(patient.id))
+
+        try:
+            persisted_counts = self.medical_persistence_service.persist_extracted_record(
+                db=db,
+                patient_id=pat_uuid,
+                document_id=doc_uuid,
+                extracted=extracted_record,
+            )
+        except Exception as pe:
+            logger.error("Failed to persist extraction results for document %s: %s", document_id, str(pe))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to persist extracted clinical information.",
+            )
+
+        return MedicalExtractionResponse(
+            document_id=doc_uuid,
+            patient_id=pat_uuid,
+            status="COMPLETED",
+            extracted_record=extracted_record,
+            persisted_counts=persisted_counts,
+            extracted_at=datetime.now(),
         )
 
 

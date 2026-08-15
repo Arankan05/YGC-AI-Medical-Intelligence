@@ -87,7 +87,11 @@ export function DocumentsView() {
           value={filter}
           onChange={(value) => setFilter(value as DocumentType | "all")}
         />
-        <Button render={<Link href="/documents/upload" />} className="gap-2">
+        <Button
+          nativeButton={false}
+          render={<Link href="/documents/upload" />}
+          className="gap-2"
+        >
           <Upload className="size-4" strokeWidth={1.8} />
           Upload documents
         </Button>
@@ -170,9 +174,8 @@ export function DocumentsView() {
                       <td className="px-[18px] py-[13px]">
                         <div className="flex items-center gap-3">
                           <span
-                            className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
-                              failed ? "bg-risk-high-bg" : "bg-neutral-100"
-                            }`}
+                            className={`flex size-8 shrink-0 items-center justify-center rounded-md ${failed ? "bg-risk-high-bg" : "bg-neutral-100"
+                              }`}
                           >
                             {failed ? (
                               <FileWarning

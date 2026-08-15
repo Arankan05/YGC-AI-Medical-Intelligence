@@ -27,6 +27,7 @@ from app.schemas.document import (
     DocumentProcessResponse,
     DocumentResponse,
 )
+from app.schemas.extraction import MedicalExtractionResponse
 from app.services.document_processing_service import (
     DocumentProcessingService,
     get_document_processing_service,
@@ -440,5 +441,33 @@ def process_document_endpoint(
         has_text=result.has_text,
         confidence=result.confidence,
         processed_at=result.processed_at,
+    )
+
+
+@router.post(
+    "/{document_id}/extract",
+    response_model=MedicalExtractionResponse,
+    summary="Extract structured medical intelligence from document",
+    description="Extracts structured clinical data (events, medications, prescriptions, lab results, allergies, findings) from document text using AI and persists into patient record.",
+)
+def extract_document_endpoint(
+    document_id: UUID,
+    current_user: User = Depends(get_current_application_user),
+    db: Session = Depends(get_db),
+    processing_service: DocumentProcessingService = Depends(get_document_processing_service),
+) -> MedicalExtractionResponse:
+    """
+    Protected document medical extraction endpoint:
+    1. Validates user authentication and patient profile.
+    2. Enforces ownership isolation (User -> Patient -> Document).
+    3. Triggers text extraction if not previously completed.
+    4. Extracts structured clinical information using configured AI provider (Google Gemini).
+    5. Persists entities (MedicalEvent, Medication, Prescription, LabResult, Allergy, Finding, AIAnalysis).
+    6. Returns structured extraction payload and persisted record counts.
+    """
+    return processing_service.extract_user_document(
+        user=current_user,
+        document_id=document_id,
+        db=db,
     )
 
