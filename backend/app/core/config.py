@@ -62,6 +62,10 @@ class Settings(BaseSettings):
         default="gemini",
         description="AI LLM Provider (e.g. gemini, openai)",
     )
+    AI_MODEL: str = Field(
+        default="gemini-3.5-flash-lite",
+        description="AI LLM Model Name (default: gemini-3.5-flash-lite)",
+    )
     AI_API_KEY: Optional[str] = Field(
         default="",
         description="API Key for AI provider",

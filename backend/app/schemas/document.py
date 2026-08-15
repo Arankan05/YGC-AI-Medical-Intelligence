@@ -6,6 +6,15 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+from app.schemas.records import (
+    AllergyRecordResponse,
+    FindingRecordResponse,
+    LabResultRecordResponse,
+    MedicalEventRecordResponse,
+    MedicationRecordResponse,
+)
+
+
 class DocumentResponse(BaseModel):
     """
     Public response schema for medical document metadata.
@@ -21,6 +30,25 @@ class DocumentResponse(BaseModel):
     uploaded_at: datetime = Field(..., description="Timestamp when the document was uploaded")
     processed_at: Optional[datetime] = Field(default=None, description="Timestamp when processing completed, if applicable")
     error_message: Optional[str] = Field(default=None, description="Error message if document processing encountered issues")
+    extraction_method: Optional[str] = Field(default=None, description="Extraction method used ('pymupdf' or 'tesseract')")
+    page_count: Optional[int] = Field(default=None, description="Total pages processed")
+    extracted_text: Optional[str] = Field(default=None, description="Extracted clinical text if available")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentDetailResponse(DocumentResponse):
+    """
+    Comprehensive document detail schema including all extracted clinical entities.
+    """
+
+    medications: List[MedicationRecordResponse] = Field(default_factory=list, description="Prescriptions extracted from this document")
+    findings: List[FindingRecordResponse] = Field(default_factory=list, description="Clinical findings associated with patient")
+    lab_results: List[LabResultRecordResponse] = Field(default_factory=list, description="Lab test results extracted from this document")
+    allergies: List[AllergyRecordResponse] = Field(default_factory=list, description="Drug allergies extracted from this document")
+    events: List[MedicalEventRecordResponse] = Field(default_factory=list, description="Medical timeline events extracted from this document")
+    ai_summary: Optional[str] = Field(default=None, description="AI-extracted summary for this document / patient")
+    ai_confidence: Optional[float] = Field(default=None, description="AI extraction confidence score")
 
     model_config = ConfigDict(from_attributes=True)
 

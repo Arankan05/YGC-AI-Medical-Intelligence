@@ -35,6 +35,41 @@ def test_gemini_missing_api_key():
         provider.generate_structured("Hello")
 
 
+def test_gemini_model_name_normalization():
+    p1 = GeminiAIProvider(api_key="key", model_name="models/gemini-3.5-flash-lite")
+    assert p1.model_name == "gemini-3.5-flash-lite"
+
+    p2 = GeminiAIProvider(api_key="key", model_name="  gemini-3.5-flash-lite  ")
+    assert p2.model_name == "gemini-3.5-flash-lite"
+
+
+def test_gemini_header_authentication_used():
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "candidates": [
+            {"content": {"parts": [{"text": "Hello world"}]}}
+        ]
+    }
+
+    mock_client = MagicMock(spec=httpx.Client)
+    mock_client.post.return_value = mock_response
+
+    provider = GeminiAIProvider(api_key="my-secret-key-123", model_name="gemini-3.5-flash-lite", http_client=mock_client)
+    provider.generate_text("Hi")
+
+    mock_client.post.assert_called_once()
+    call_args, call_kwargs = mock_client.post.call_args
+
+    # Verify URL does NOT have key in query string
+    assert "key=" not in call_args[0]
+    assert call_args[0].endswith("v1beta/models/gemini-3.5-flash-lite:generateContent")
+
+    # Verify header contains key
+    headers = call_kwargs.get("headers", {})
+    assert headers.get("x-goog-api-key") == "my-secret-key-123"
+
+
 def test_gemini_generate_text_success():
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
@@ -121,6 +156,7 @@ def test_gemini_generate_structured_invalid_json():
 def test_gemini_auth_error():
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 401
+    mock_response.json.return_value = {"error": {"code": 401, "message": "API key not valid", "status": "UNAUTHENTICATED"}}
 
     mock_client = MagicMock(spec=httpx.Client)
     mock_client.post.return_value = mock_response
@@ -133,6 +169,7 @@ def test_gemini_auth_error():
 def test_gemini_rate_limit_error():
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 429
+    mock_response.json.return_value = {"error": {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}}
 
     mock_client = MagicMock(spec=httpx.Client)
     mock_client.post.return_value = mock_response
@@ -146,6 +183,7 @@ def test_gemini_server_error():
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 500
     mock_response.text = "Internal Google error"
+    mock_response.json.side_effect = ValueError()
 
     mock_client = MagicMock(spec=httpx.Client)
     mock_client.post.return_value = mock_response
@@ -153,6 +191,37 @@ def test_gemini_server_error():
     provider = GeminiAIProvider(api_key="fake-key", http_client=mock_client)
     with pytest.raises(AIServiceError):
         provider.generate_structured("Extract medical data")
+
+
+def test_gemini_404_fallback_success():
+    # Primary model returns 404, custom fallback model returns 200
+    mock_404 = MagicMock(spec=httpx.Response)
+    mock_404.status_code = 404
+    mock_404.json.return_value = {
+        "error": {"code": 404, "message": "models/primary-model is not found", "status": "NOT_FOUND"}
+    }
+
+    mock_200 = MagicMock(spec=httpx.Response)
+    mock_200.status_code = 200
+    mock_200.json.return_value = {
+        "candidates": [
+            {"content": {"parts": [{"text": '{"document_type_detected":"prescription","summary":"ok","confidence_score":0.9,"events":[],"medications":[],"lab_results":[],"allergies":[],"findings":[]}'}]}}
+        ]
+    }
+
+    mock_client = MagicMock(spec=httpx.Client)
+    mock_client.post.side_effect = [mock_404, mock_200]
+
+    provider = GeminiAIProvider(
+        api_key="fake-key",
+        model_name="primary-model",
+        fallback_models=["gemini-3.5-flash-lite"],
+        http_client=mock_client,
+    )
+
+    result = provider.generate_structured("Extract text")
+    assert result["document_type_detected"] == "prescription"
+    assert mock_client.post.call_count == 2
 
 
 def test_gemini_timeout_error():
@@ -185,6 +254,7 @@ def test_factory_get_and_set_provider():
     set_ai_provider(None)
     with patch("app.core.config.get_settings") as mock_settings:
         mock_settings.return_value.AI_PROVIDER = "mock"
+        mock_settings.return_value.AI_MODEL = "gemini-3.5-flash-lite"
         mock_settings.return_value.AI_API_KEY = "test"
         prov = get_ai_provider("mock")
         assert isinstance(prov, MockAIProvider)

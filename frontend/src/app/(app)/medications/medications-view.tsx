@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Copy,
   Info,
+  Loader2,
   Pill,
   RefreshCw,
   ShieldAlert,
@@ -203,52 +204,65 @@ export function MedicationsView() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((medication) => (
-                <tr
-                  key={medication.id}
-                  className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
-                >
-                  <td className="px-[18px] py-[13px]">
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
-                        <Pill className="size-[15px] text-brand-700" strokeWidth={1.8} />
-                      </span>
-                      <span className="flex flex-col gap-0.5">
-                        <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
-                          {medication.name}
-                        </span>
-                        <span className="text-xs leading-4 font-medium text-neutral-500">
-                          {medication.genericName}
-                        </span>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
-                    {medication.dosage}
-                  </td>
-                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
-                    {medication.frequency}
-                  </td>
-                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
-                    {medication.prescribedBy}
-                  </td>
-                  <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
-                    {medication.startedOn}
-                  </td>
-                  <td className="py-[13px] pr-[18px]">
-                    <div className="flex flex-wrap gap-1.5">
-                      {medication.flags.map((flag) => (
-                        <FlagChip key={flag} flag={flag} />
-                      ))}
-                      {medication.flags.length === 0 && (
-                        <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">
-                          NO CONFLICTS
-                        </span>
-                      )}
+              {loading && (
+                <tr className="border-t border-neutral-200">
+                  <td colSpan={6} className="px-[18px] py-12 text-center text-neutral-500">
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <Loader2 className="size-4 animate-spin text-brand-600" />
+                      Loading medications...
                     </div>
                   </td>
                 </tr>
-              ))}
+              )}
+
+              {!loading &&
+                rows.map((medication) => (
+                  <tr
+                    key={medication.id}
+                    className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
+                  >
+                    <td className="px-[18px] py-[13px]">
+                      <div className="flex items-center gap-3">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
+                          <Pill className="size-[15px] text-brand-700" strokeWidth={1.8} />
+                        </span>
+                        <span className="flex flex-col gap-0.5">
+                          <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
+                            {medication.name}
+                          </span>
+                          <span className="text-xs leading-4 font-medium text-neutral-500">
+                            {medication.genericName}
+                            {medication.instructions ? ` · ${medication.instructions}` : ""}
+                          </span>
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                      {medication.dosage}
+                    </td>
+                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                      {medication.frequency}
+                    </td>
+                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                      {medication.prescribedBy}
+                    </td>
+                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
+                      {medication.startedOn}
+                    </td>
+                    <td className="py-[13px] pr-[18px]">
+                      <div className="flex flex-wrap gap-1.5">
+                        {medication.flags.map((flag) => (
+                          <FlagChip key={flag} flag={flag} />
+                        ))}
+                        {medication.flags.length === 0 && (
+                          <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">
+                            NO CONFLICTS
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
 
               {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">

@@ -7,17 +7,24 @@
 
 import { getAccessToken, getSupabase } from "@/lib/supabase";
 import type {
+  AIAnalysisRecord,
+  AllergyRecord,
   ChatMessage,
   CrossCheckIssue,
+  DocumentDetail,
   DocumentStatus,
   DocumentType,
   Finding,
   LabResult,
   MedicalDocument,
+  MedicalOverview,
   Medication,
+  MedicationFlagKind,
   Provider,
   ProviderSearchParams,
+  RiskLevel,
   TimelineEvent,
+  TimelineEventKind,
   UserProfile,
 } from "@/lib/types";
 
@@ -64,12 +71,17 @@ export interface MediGuardianApi {
   ): Promise<MedicalDocument>;
   deleteDocument(documentId: string): Promise<void>;
   retryDocument(documentId: string): Promise<void>;
+  extractDocument(documentId: string): Promise<void>;
+  getDocument(documentId: string): Promise<DocumentDetail>;
 
+  getOverview(): Promise<MedicalOverview>;
   listTimeline(): Promise<TimelineEvent[]>;
   listMedications(): Promise<Medication[]>;
   listCrossCheckIssues(): Promise<CrossCheckIssue[]>;
   listLabResults(): Promise<LabResult[]>;
   listFindings(): Promise<Finding[]>;
+  listAllergies(): Promise<AllergyRecord[]>;
+  listAnalyses(): Promise<AIAnalysisRecord[]>;
   listNotifications(): Promise<Finding[]>;
   getFinding(findingId: string): Promise<Finding>;
 
@@ -172,6 +184,232 @@ function mapDocument(doc: BackendDocumentResponse): MedicalDocument {
     status: mapDocumentStatus(doc.processing_status || "COMPLETED"),
     source: doc.document_type === "scanned_document" ? "scanned" : "digital",
     extractedItems: doc.processing_status === "COMPLETED" ? 1 : undefined,
+  };
+}
+
+interface BackendMedicationResponse {
+  id: string;
+  name: string;
+  normalized_name: string;
+  dosage?: string | null;
+  frequency?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  instructions?: string | null;
+  source_document_id?: string | null;
+  source_document_name?: string | null;
+  status: string;
+  created_at: string;
+}
+
+function mapMedication(item: BackendMedicationResponse): Medication {
+  const flags: MedicationFlagKind[] = [];
+  return {
+    id: String(item.id),
+    name: item.name || "Medication",
+    genericName: item.normalized_name || item.name || "Medication",
+    dosage: item.dosage || "As prescribed",
+    frequency: item.frequency || "Daily",
+    startedOn: formatDate(item.start_date || item.created_at),
+    prescribedBy: item.source_document_name ? `From ${item.source_document_name}` : "Clinical Record",
+    sourceDocumentId: item.source_document_id ? String(item.source_document_id) : "",
+    sourceDocumentName: item.source_document_name || undefined,
+    instructions: item.instructions || undefined,
+    status: item.status === "stopped" ? "stopped" : "active",
+    flags,
+  };
+}
+
+interface BackendFindingResponse {
+  id: string;
+  finding_type: string;
+  title: string;
+  description: string;
+  risk_level?: string | null;
+  confidence?: number | null;
+  recommendation?: string | null;
+  created_at: string;
+}
+
+function mapFinding(item: BackendFindingResponse): Finding {
+  const riskRaw = (item.risk_level || "low").toLowerCase();
+  const risk: RiskLevel = riskRaw === "high" || riskRaw === "medium" || riskRaw === "low" ? (riskRaw as RiskLevel) : "low";
+  const typeLower = (item.finding_type || "").toLowerCase();
+
+  let category: MedicationFlagKind | "lab-trend" | "follow-up" = "follow-up";
+  let categoryLabel = "CLINICAL FINDING";
+  let categoryName = "Clinical Finding";
+
+  if (typeLower.includes("allergy")) {
+    category = "allergy";
+    categoryLabel = "ALLERGY CHECK";
+    categoryName = "Allergy / Contradiction";
+  } else if (typeLower.includes("interaction") || typeLower.includes("contraindication")) {
+    category = "interaction";
+    categoryLabel = "DRUG INTERACTION";
+    categoryName = "Medication Interaction";
+  } else if (typeLower.includes("duplicate")) {
+    category = "duplicate";
+    categoryLabel = "DUPLICATE CHECK";
+    categoryName = "Duplicate Therapy";
+  } else if (typeLower.includes("dosage")) {
+    category = "dosage";
+    categoryLabel = "DOSAGE CHECK";
+    categoryName = "Dosage Conflict";
+  } else if (typeLower.includes("lab")) {
+    category = "lab-trend";
+    categoryLabel = "LAB TREND";
+    categoryName = "Biomarker Trend";
+  }
+
+  const confidencePct = typeof item.confidence === "number" ? Math.round(item.confidence <= 1 ? item.confidence * 100 : item.confidence) : 90;
+
+  return {
+    id: String(item.id),
+    title: item.title || "Clinical Finding",
+    category,
+    categoryLabel,
+    categoryName,
+    risk,
+    confidence: confidencePct,
+    summary: item.description || "",
+    detectedOn: formatDate(item.created_at),
+    detectedAt: formatDate(item.created_at),
+    documentsInvolved: "Extracted from medical records",
+    reviewStatus: "AI-extracted · Review with physician",
+    guidance: item.recommendation || "Verify with a qualified healthcare professional.",
+    relatedMedications: [],
+    evidence: [],
+    whatThisMeans: item.description || "",
+    determination: [
+      { kind: "ai", text: "AI-extracted and structured by MediGuardian Intelligence Layer." },
+    ],
+    contributingFactors: [],
+    recommendedAction: item.recommendation || "Discuss with your physician during your next consultation.",
+    suitableProfessional: {
+      title: "Prescribing Physician / Specialist",
+      rationale: "Can review dosage, clinical context, and alternatives.",
+    },
+    providerCta: { label: "Find Healthcare Provider", primary: true },
+  };
+}
+
+interface BackendLabResultResponse {
+  id: string;
+  test_name: string;
+  value: string;
+  unit?: string | null;
+  reference_range?: string | null;
+  result_date?: string | null;
+  source_document_id?: string | null;
+  source_document_name?: string | null;
+  created_at: string;
+}
+
+function mapLabResult(item: BackendLabResultResponse): LabResult {
+  const numVal = parseFloat(item.value);
+  const validNum = !isNaN(numVal);
+  return {
+    id: String(item.id),
+    name: item.test_name || "Diagnostic Test",
+    unit: item.unit || "",
+    referenceRange: item.reference_range || "—",
+    latestValue: validNum ? numVal : 0,
+    latestValueLabel: item.value || "—",
+    latestDate: formatDate(item.result_date || item.created_at),
+    sourceDocument: item.source_document_name || "Lab Report",
+    trend: "stable",
+    severity: "ok",
+    statusLabel: "Recorded",
+    trendLabel: "Result",
+    points: [
+      {
+        date: formatDate(item.result_date || item.created_at),
+        value: validNum ? numVal : 0,
+        documentId: String(item.source_document_id || ""),
+      },
+    ],
+  };
+}
+
+interface BackendMedicalEventResponse {
+  id: string;
+  event_type: string;
+  event_date?: string | null;
+  title: string;
+  description?: string | null;
+  source_document_id?: string | null;
+  source_document_name?: string | null;
+  created_at: string;
+}
+
+function mapTimelineEvent(item: BackendMedicalEventResponse): TimelineEvent {
+  const typeLower = (item.event_type || "").toLowerCase();
+  let kind: TimelineEventKind = "note";
+  if (typeLower.includes("prescript") || typeLower.includes("med")) kind = "prescription";
+  else if (typeLower.includes("lab")) kind = "lab";
+  else if (typeLower.includes("imag") || typeLower.includes("xray") || typeLower.includes("scan")) kind = "imaging";
+  else if (typeLower.includes("visit") || typeLower.includes("admiss") || typeLower.includes("consult")) kind = "visit";
+
+  return {
+    id: String(item.id),
+    date: formatDate(item.event_date || item.created_at),
+    kind,
+    title: item.title || "Medical Event",
+    provider: item.source_document_name ? `From: ${item.source_document_name}` : "Medical Record",
+    summary: item.description || "",
+    documentTitle: item.source_document_name || "Document",
+    documentId: String(item.source_document_id || ""),
+    tags: [kind.toUpperCase()],
+  };
+}
+
+interface BackendAllergyResponse {
+  id: string;
+  medication_name: string;
+  normalized_medication_name: string;
+  reaction?: string | null;
+  severity?: string | null;
+  source_document_id?: string | null;
+  created_at: string;
+}
+
+function mapAllergy(item: BackendAllergyResponse): AllergyRecord {
+  return {
+    id: String(item.id),
+    medicationName: item.medication_name,
+    normalizedMedicationName: item.normalized_medication_name || item.medication_name,
+    reaction: item.reaction || undefined,
+    severity: item.severity || "moderate",
+    sourceDocumentId: item.source_document_id ? String(item.source_document_id) : undefined,
+    recordedDate: formatDate(item.created_at),
+    createdAt: item.created_at,
+  };
+}
+
+interface BackendAIAnalysisResponse {
+  id: string;
+  analysis_type: string;
+  result: Record<string, unknown>;
+  confidence?: number | null;
+  created_at: string;
+}
+
+function mapAIAnalysis(item: BackendAIAnalysisResponse): AIAnalysisRecord {
+  const resObj = typeof item.result === "object" && item.result !== null ? item.result : {};
+  const summary = typeof resObj.summary === "string" ? resObj.summary : undefined;
+  const confidencePct =
+    typeof item.confidence === "number"
+      ? Math.round(item.confidence <= 1 ? item.confidence * 100 : item.confidence)
+      : undefined;
+
+  return {
+    id: String(item.id),
+    analysisType: item.analysis_type || "document_extraction",
+    result: resObj,
+    confidence: confidencePct,
+    summary,
+    createdAt: formatDate(item.created_at),
   };
 }
 
@@ -326,10 +564,10 @@ const defaultApiImplementation: MediGuardianApi = {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
-            // Optionally trigger extraction pipeline
+            // Automatically trigger AI extraction pipeline on upload
             try {
               if (data.id) {
-                await authFetch(`/api/documents/${data.id}/process`, {
+                await authFetch(`/api/documents/${data.id}/extract`, {
                   method: "POST",
                 });
               }
@@ -388,32 +626,203 @@ const defaultApiImplementation: MediGuardianApi = {
     }
   },
 
-  // Returns empty arrays for features whose backend endpoints do not exist yet
+  async extractDocument(documentId: string): Promise<void> {
+    const res = await authFetch(`/api/documents/${documentId}/extract`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to extract medical data with AI." }));
+      throw new Error(err.detail || "Failed to extract medical data with AI.");
+    }
+  },
+
+  async getDocument(documentId: string): Promise<DocumentDetail> {
+    const res = await authFetch(`/api/documents/${documentId}`, { method: "GET" });
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch document details." }));
+      throw new Error(err.detail || "Failed to fetch document details.");
+    }
+    const data = await res.json();
+    const baseDoc = mapDocument(data);
+    const confidencePct =
+      typeof data.ai_confidence === "number"
+        ? Math.round(data.ai_confidence <= 1 ? data.ai_confidence * 100 : data.ai_confidence)
+        : undefined;
+
+    return {
+      ...baseDoc,
+      processedAt: data.processed_at ? formatDate(data.processed_at) : undefined,
+      extractedText: data.extracted_text || undefined,
+      extractionMethod: data.extraction_method || undefined,
+      pageCount: data.page_count || baseDoc.pages,
+      medications: (data.medications || []).map(mapMedication),
+      findings: (data.findings || []).map(mapFinding),
+      labResults: (data.lab_results || []).map(mapLabResult),
+      allergies: (data.allergies || []).map(mapAllergy),
+      events: (data.events || []).map(mapTimelineEvent),
+      aiSummary: data.ai_summary || undefined,
+      aiConfidence: confidencePct,
+    };
+  },
+
+  async getOverview(): Promise<MedicalOverview> {
+    const res = await authFetch("/api/records/overview", { method: "GET" });
+    if (res.status === 401) {
+      return {
+        patientId: "",
+        totalDocuments: 0,
+        totalMedications: 0,
+        totalFindings: 0,
+        totalEvents: 0,
+        totalLabResults: 0,
+        totalAllergies: 0,
+        recentEvents: [],
+        activeMedications: [],
+        priorityFindings: [],
+      };
+    }
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch medical overview." }));
+      throw new Error(err.detail || "Failed to fetch medical overview.");
+    }
+    const data = await res.json();
+    return {
+      patientId: String(data.patient_id || ""),
+      totalDocuments: data.total_documents || 0,
+      totalMedications: data.total_medications || 0,
+      totalFindings: data.total_findings || 0,
+      totalEvents: data.total_events || 0,
+      totalLabResults: data.total_lab_results || 0,
+      totalAllergies: data.total_allergies || 0,
+      latestSummary: data.latest_summary || undefined,
+      confidenceScore: data.confidence_score ?? undefined,
+      recentEvents: (data.recent_events || []).map(mapTimelineEvent),
+      activeMedications: (data.active_medications || []).map(mapMedication),
+      priorityFindings: (data.priority_findings || []).map(mapFinding),
+    };
+  },
+
   async listTimeline(): Promise<TimelineEvent[]> {
-    return [];
+    const res = await authFetch("/api/records/timeline", { method: "GET" });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch timeline events." }));
+      throw new Error(err.detail || "Failed to fetch timeline events.");
+    }
+    const data = await res.json();
+    return (data || []).map(mapTimelineEvent);
   },
 
   async listMedications(): Promise<Medication[]> {
-    return [];
+    const res = await authFetch("/api/records/medications", { method: "GET" });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch medications." }));
+      throw new Error(err.detail || "Failed to fetch medications.");
+    }
+    const data = await res.json();
+    return (data || []).map(mapMedication);
   },
 
   async listCrossCheckIssues(): Promise<CrossCheckIssue[]> {
-    return [];
+    const findings = await defaultApiImplementation.listFindings();
+    return findings
+      .filter((f) => f.risk === "high" || f.risk === "medium")
+      .map((f) => {
+        let kind: MedicationFlagKind = "interaction";
+        if (f.category === "allergy") kind = "allergy";
+        else if (f.category === "duplicate") kind = "duplicate";
+        else if (f.category === "dosage") kind = "dosage";
+
+        return {
+          id: f.id,
+          kind,
+          risk: f.risk,
+          title: f.title,
+          medications: f.relatedMedications && f.relatedMedications.length > 0 ? f.relatedMedications : [f.title],
+          explanation: f.summary,
+          recommendation: f.recommendedAction || f.guidance,
+          confidence: f.confidence / 100,
+        };
+      });
   },
 
   async listLabResults(): Promise<LabResult[]> {
-    return [];
+    const res = await authFetch("/api/records/lab-results", { method: "GET" });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch lab results." }));
+      throw new Error(err.detail || "Failed to fetch lab results.");
+    }
+    const data = await res.json();
+    return (data || []).map(mapLabResult);
   },
 
   async listFindings(): Promise<Finding[]> {
-    return [];
+    const res = await authFetch("/api/records/findings", { method: "GET" });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch findings." }));
+      throw new Error(err.detail || "Failed to fetch findings.");
+    }
+    const data = await res.json();
+    return (data || []).map(mapFinding);
+  },
+
+  async listAllergies(): Promise<AllergyRecord[]> {
+    const res = await authFetch("/api/records/allergies", { method: "GET" });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch allergy records." }));
+      throw new Error(err.detail || "Failed to fetch allergy records.");
+    }
+    const data = await res.json();
+    return (data || []).map(mapAllergy);
+  },
+
+  async listAnalyses(): Promise<AIAnalysisRecord[]> {
+    const res = await authFetch("/api/records/analyses", { method: "GET" });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch AI analyses." }));
+      throw new Error(err.detail || "Failed to fetch AI analyses.");
+    }
+    const data = await res.json();
+    return (data || []).map(mapAIAnalysis);
   },
 
   async listNotifications(): Promise<Finding[]> {
-    return [];
+    const findings = await defaultApiImplementation.listFindings();
+    return findings.filter((f) => f.risk === "high" || f.risk === "medium");
   },
 
-  getFinding: (id: string) => unconfigured("getFinding")(id),
+  async getFinding(findingId: string): Promise<Finding> {
+    const findings = await defaultApiImplementation.listFindings();
+    const match = findings.find((f) => f.id === findingId);
+    if (!match) {
+      throw new Error(`Finding with ID ${findingId} not found.`);
+    }
+    return match;
+  },
+
   askAi: (input: AskAiInput) => unconfigured("askAi")(input),
   searchProviders: (params: ProviderSearchParams) =>
     unconfigured("searchProviders")(params),

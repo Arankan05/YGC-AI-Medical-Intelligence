@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Upload } from "lucide-react";
+import { Calendar, Loader2, Upload } from "lucide-react";
 
 import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { api } from "@/lib/api";
@@ -88,11 +88,23 @@ export function LabResultsView() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((result) => (
-                <tr
-                  key={result.id}
-                  className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
-                >
+              {loading && (
+                <tr className="border-t border-neutral-200">
+                  <td colSpan={5} className="px-[18px] py-12 text-center text-neutral-500">
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <Loader2 className="size-4 animate-spin text-brand-600" />
+                      Loading lab results...
+                    </div>
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                rows.map((result) => (
+                  <tr
+                    key={result.id}
+                    className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
+                  >
                   <td className="px-[18px] py-[13px] text-sm font-medium text-neutral-900">
                     {result.name}
                   </td>

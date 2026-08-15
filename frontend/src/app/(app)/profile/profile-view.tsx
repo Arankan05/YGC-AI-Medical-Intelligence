@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import { Download, FileClock, Loader2, Lock, LogIn, Monitor, Smartphone } from "lucide-react";
+import {
+  Calendar,
+  Download,
+  Loader2,
+  LogIn,
+  Pill,
+  ShieldAlert,
+  Sparkles,
+} from "lucide-react";
 
 import { Field, fieldInputClass } from "@/components/field";
 import { Panel, PanelHeader } from "@/components/panel";
+import { RiskBadge } from "@/components/risk-badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,17 +25,22 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { api, toErrorMessage } from "@/lib/api";
 import {
-  dataActions,
-  deleteDataNote,
-  isolationNotes,
   securityToggles,
 } from "@/lib/data";
-import type { UserProfile } from "@/lib/types";
+import type {
+  AllergyRecord,
+  LabResult,
+  MedicalOverview,
+  UserProfile,
+} from "@/lib/types";
 
 type DangerAction = "documents" | "account" | null;
 
 export function ProfileView() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [overview, setOverview] = useState<MedicalOverview | null>(null);
+  const [allergies, setAllergies] = useState<AllergyRecord[]>([]);
+  const [labs, setLabs] = useState<LabResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -36,53 +50,46 @@ export function ProfileView() {
     language: "",
     dateOfBirth: "",
   });
-  const [docCount, setDocCount] = useState<number | null>(null);
   const [toggles, setToggles] = useState(() =>
     Object.fromEntries(securityToggles.map((item) => [item.id, item.enabled]))
   );
-  const [sessions, setSessions] = useState([
-    {
-      id: "current-browser",
-      device: "Current Web Browser",
-      location: "Active Session",
-      lastActive: "Active now",
-      current: true,
-    },
-  ]);
   const [danger, setDanger] = useState<DangerAction>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    api()
-      .getProfile()
-      .then((data) => {
+
+    async function loadData() {
+      try {
+        const [profData, overviewData, allergyData, labData] = await Promise.all([
+          api().getProfile(),
+          api().getOverview().catch(() => null),
+          api().listAllergies().catch(() => []),
+          api().listLabResults().catch(() => []),
+        ]);
+
         if (active) {
-          setProfile(data);
+          setProfile(profData);
+          setOverview(overviewData);
+          setAllergies(allergyData || []);
+          setLabs(labData || []);
           setEditForm({
-            fullName: data.fullName,
-            phone: data.phone === "—" ? "" : data.phone,
-            language: data.language,
-            dateOfBirth: data.dateOfBirth === "—" ? "" : data.dateOfBirth,
+            fullName: profData.fullName,
+            phone: profData.phone === "—" ? "" : profData.phone,
+            language: profData.language,
+            dateOfBirth: profData.dateOfBirth === "—" ? "" : profData.dateOfBirth,
           });
           setLoading(false);
         }
-      })
-      .catch((caught) => {
+      } catch (caught) {
         if (active) {
           setError(toErrorMessage(caught));
           setLoading(false);
         }
-      });
+      }
+    }
 
-    api()
-      .listDocuments()
-      .then((docs) => {
-        if (active) setDocCount(docs.length);
-      })
-      .catch(() => {
-        if (active) setDocCount(0);
-      });
+    loadData();
 
     return () => {
       active = false;
@@ -100,7 +107,6 @@ export function ProfileView() {
         for (const doc of docs) {
           await api().deleteDocument(doc.id);
         }
-        setDocCount(0);
         setStatus("All documents deleted successfully.");
       }
     } catch (caught) {
@@ -154,14 +160,15 @@ export function ProfileView() {
       <div className="flex min-h-[400px] w-full items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-neutral-500">
           <Loader2 className="size-6 animate-spin text-brand-600" />
-          <p className="text-sm">Loading user profile...</p>
+          <p className="text-sm">Loading patient profile...</p>
         </div>
       </div>
     );
   }
 
   if (error && !profile) {
-    const isSessionError = error.toLowerCase().includes("session") || error.toLowerCase().includes("sign in");
+    const isSessionError =
+      error.toLowerCase().includes("session") || error.toLowerCase().includes("sign in");
     return (
       <div className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 px-4">
         <div className="max-w-md rounded-xl border border-neutral-200 bg-neutral-0 p-6 text-center shadow-card">
@@ -208,9 +215,9 @@ export function ProfileView() {
   if (!profile) return null;
 
   const accountFields = [
-    { label: "FULL NAME", value: profile.legalName || profile.fullName || "—" },
-    { label: "EMAIL", value: profile.email || "—" },
-    { label: "PHONE", value: profile.phone || "—" },
+    { label: "LEGAL FULL NAME", value: profile.legalName || profile.fullName || "—" },
+    { label: "EMAIL ADDRESS", value: profile.email || "—" },
+    { label: "PHONE NUMBER", value: profile.phone || "—" },
   ];
   const identityFields = [
     { label: "DATE OF BIRTH", value: profile.dateOfBirth || "—" },
@@ -218,77 +225,321 @@ export function ProfileView() {
     { label: "PREFERRED LANGUAGE", value: profile.language || "English" },
   ];
 
+  const totalDocs = overview?.totalDocuments ?? 0;
+  const totalMeds = overview?.totalMedications ?? 0;
+  const totalFindings = overview?.totalFindings ?? 0;
+  const totalEvents = overview?.totalEvents ?? 0;
+  const totalLabs = overview?.totalLabResults ?? labs.length;
+  const totalAllergies = overview?.totalAllergies ?? allergies.length;
+
+  const activeMeds = overview?.activeMedications ?? [];
+  const priorityFindings = overview?.priorityFindings ?? [];
+  const recentEvents = overview?.recentEvents ?? [];
+
   return (
-    <div className="flex min-h-full w-full flex-col gap-3.5 px-4 py-[22px] md:px-[26px] xl:flex-row xl:items-stretch">
-      <div className="flex w-full min-w-0 flex-1 flex-col gap-3.5">
-        {/* panel · Account (38:1472) */}
-        <Panel>
-          <PanelHeader title="Account" className="py-3" />
-          <div className="flex flex-col gap-3.5 px-[18px] pt-[15px] pb-4">
-            <div className="flex w-full flex-wrap items-center gap-3.5">
-              <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-700 text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-0">
+    <div className="flex min-h-full w-full flex-col gap-5 px-4 py-[22px] md:px-[26px]">
+      {/* Top Patient Hero & Information */}
+      <Panel>
+        <PanelHeader title="Patient Profile & Demographics" className="py-3" />
+        <div className="flex flex-col gap-4 px-[18px] pt-[15px] pb-4">
+          <div className="flex w-full flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-700 text-lg font-semibold text-neutral-0 shadow-sm">
                 {profile.initials}
               </span>
-              <span className="flex min-w-[200px] flex-1 flex-col gap-[3px]">
-                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xl font-bold tracking-tight text-neutral-900">
                   {profile.fullName}
                 </span>
-                <span className="text-[13px] leading-[19px] text-neutral-500">
-                  {profile.accountType} · member since {profile.memberSince}
+                <span className="text-[13px] text-neutral-500">
+                  {profile.accountType} · Patient Record since {profile.memberSince}
                 </span>
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="px-[15px] py-[9px]"
-                onClick={() => setEditing(true)}
-              >
-                Edit profile
-              </Button>
+              </div>
             </div>
-
-            <dl className="flex w-full flex-wrap gap-x-6 gap-y-[13px]">
-              <div className="flex min-w-[220px] flex-1 flex-col gap-[13px]">
-                {accountFields.map((field) => (
-                  <div key={field.label} className="flex flex-col gap-[3px]">
-                    <dt className="type-overline text-neutral-500">
-                      {field.label}
-                    </dt>
-                    <dd className="text-sm leading-[21px] text-neutral-800">
-                      {field.value}
-                    </dd>
-                  </div>
-                ))}
-              </div>
-              <div className="flex min-w-[220px] flex-1 flex-col gap-[13px]">
-                {identityFields.map((field) => (
-                  <div key={field.label} className="flex flex-col gap-[3px]">
-                    <dt className="type-overline text-neutral-500">
-                      {field.label}
-                    </dt>
-                    <dd className="text-sm leading-[21px] text-neutral-800">
-                      {field.value}
-                    </dd>
-                  </div>
-                ))}
-              </div>
-            </dl>
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-4 py-2"
+              onClick={() => setEditing(true)}
+            >
+              Edit Profile Info
+            </Button>
           </div>
-        </Panel>
 
-        {/* panel · Security (38:1506) */}
+          <dl className="grid grid-cols-1 gap-4 border-t border-neutral-100 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+            {accountFields.map((field) => (
+              <div key={field.label} className="flex flex-col gap-0.5">
+                <dt className="type-overline text-neutral-500">{field.label}</dt>
+                <dd className="text-sm font-medium text-neutral-800">{field.value}</dd>
+              </div>
+            ))}
+            {identityFields.map((field) => (
+              <div key={field.label} className="flex flex-col gap-0.5">
+                <dt className="type-overline text-neutral-500">{field.label}</dt>
+                <dd className="text-sm font-medium text-neutral-800">{field.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </Panel>
+
+      {/* AI Clinical Summary Banner */}
+      {overview?.latestSummary && (
+        <div className="flex w-full flex-col gap-2.5 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-brand-700" />
+              <h3 className="text-sm font-semibold text-brand-900">
+                AI Executive Medical Summary
+              </h3>
+            </div>
+            {overview.confidenceScore !== undefined && (
+              <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-800">
+                Confidence:{" "}
+                {Math.round(
+                  overview.confidenceScore <= 1
+                    ? overview.confidenceScore * 100
+                    : overview.confidenceScore
+                )}
+                %
+              </span>
+            )}
+          </div>
+          <p className="text-[13px] leading-[21px] text-neutral-800">
+            {overview.latestSummary}
+          </p>
+          <p className="text-[11px] text-neutral-500 italic">
+            AI-extracted clinical summary · Always verify medical information with a qualified healthcare professional.
+          </p>
+        </div>
+      )}
+
+      {/* Record Statistics Grid */}
+      <div>
+        <h3 className="type-overline mb-2 text-neutral-500">
+          HEALTH RECORD STATISTICS
+        </h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Link
+            href="/documents"
+            className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card transition-colors hover:border-brand-300"
+          >
+            <span className="type-overline text-neutral-500">DOCUMENTS</span>
+            <span className="text-2xl font-bold text-neutral-900">{totalDocs}</span>
+            <span className="text-xs text-brand-700">View all →</span>
+          </Link>
+          <Link
+            href="/medications"
+            className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card transition-colors hover:border-brand-300"
+          >
+            <span className="type-overline text-neutral-500">MEDICATIONS</span>
+            <span className="text-2xl font-bold text-neutral-900">{totalMeds}</span>
+            <span className="text-xs text-brand-700">View active →</span>
+          </Link>
+          <Link
+            href="/findings"
+            className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card transition-colors hover:border-brand-300"
+          >
+            <span className="type-overline text-neutral-500">FINDINGS</span>
+            <span className="text-2xl font-bold text-neutral-900">{totalFindings}</span>
+            <span className="text-xs text-brand-700">View alerts →</span>
+          </Link>
+          <Link
+            href="/timeline"
+            className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card transition-colors hover:border-brand-300"
+          >
+            <span className="type-overline text-neutral-500">EVENTS</span>
+            <span className="text-2xl font-bold text-neutral-900">{totalEvents}</span>
+            <span className="text-xs text-brand-700">Timeline →</span>
+          </Link>
+          <Link
+            href="/lab-results"
+            className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card transition-colors hover:border-brand-300"
+          >
+            <span className="type-overline text-neutral-500">LAB RESULTS</span>
+            <span className="text-2xl font-bold text-neutral-900">{totalLabs}</span>
+            <span className="text-xs text-brand-700">Biomarkers →</span>
+          </Link>
+          <Link
+            href="/allergies"
+            className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-3.5 shadow-card transition-colors hover:border-brand-300"
+          >
+            <span className="type-overline text-neutral-500">ALLERGIES</span>
+            <span className="text-2xl font-bold text-neutral-900">{totalAllergies}</span>
+            <span className="text-xs text-brand-700">Allergen log →</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Main 2-Column Clinical Overview */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Left Column: Medications & Allergies */}
+        <div className="flex flex-col gap-5">
+          {/* Current Medications Panel */}
+          <Panel>
+            <PanelHeader
+              title="Current Medications"
+              actions={
+                <Link
+                  href="/medications"
+                  className="text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Manage ({activeMeds.length})
+                </Link>
+              }
+            />
+            <div className="flex flex-col divide-y divide-neutral-100 p-4">
+              {activeMeds.map((med) => (
+                <div key={med.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded bg-brand-50 text-brand-700">
+                      <Pill className="size-3.5" />
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-[13px] font-semibold text-neutral-900">{med.name}</span>
+                      <span className="text-xs text-neutral-500">
+                        {med.dosage} · {med.frequency}
+                        {med.instructions && ` · ${med.instructions}`}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">
+                    ACTIVE
+                  </span>
+                </div>
+              ))}
+              {activeMeds.length === 0 && (
+                <p className="py-4 text-center text-xs text-neutral-500">
+                  No active medication records. Prescriptions will appear here upon document extraction.
+                </p>
+              )}
+            </div>
+          </Panel>
+
+          {/* Known Allergies Panel */}
+          <Panel>
+            <PanelHeader
+              title="Known Drug Allergies"
+              actions={
+                <Link
+                  href="/allergies"
+                  className="text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  View All ({allergies.length})
+                </Link>
+              }
+            />
+            <div className="flex flex-col divide-y divide-neutral-100 p-4">
+              {allergies.map((al) => (
+                <div key={al.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded bg-risk-high-bg text-risk-high">
+                      <ShieldAlert className="size-3.5" />
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-[13px] font-semibold text-neutral-900">{al.medicationName}</span>
+                      <span className="text-xs text-neutral-500">{al.reaction || "Reported reaction"}</span>
+                    </div>
+                  </div>
+                  <span className="type-overline rounded-full bg-risk-high-bg px-2 py-0.5 text-risk-high">
+                    {al.severity || "Moderate"}
+                  </span>
+                </div>
+              ))}
+              {allergies.length === 0 && (
+                <p className="py-4 text-center text-xs text-neutral-500">
+                  No drug allergies recorded for this patient.
+                </p>
+              )}
+            </div>
+          </Panel>
+        </div>
+
+        {/* Right Column: Priority Findings & Recent Events */}
+        <div className="flex flex-col gap-5">
+          {/* Priority AI Findings Panel */}
+          <Panel>
+            <PanelHeader
+              title="Priority AI Findings & Contradictions"
+              actions={
+                <Link
+                  href="/findings"
+                  className="text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  All findings ({priorityFindings.length})
+                </Link>
+              }
+            />
+            <div className="flex flex-col divide-y divide-neutral-100 p-4">
+              {priorityFindings.map((finding) => (
+                <div key={finding.id} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <RiskBadge risk={finding.risk} />
+                      <span className="text-[13px] font-semibold text-neutral-900">{finding.title}</span>
+                    </div>
+                    <span className="text-xs text-neutral-500">{finding.detectedOn}</span>
+                  </div>
+                  <p className="text-xs leading-5 text-neutral-600">{finding.summary}</p>
+                </div>
+              ))}
+              {priorityFindings.length === 0 && (
+                <p className="py-4 text-center text-xs text-neutral-500">
+                  No priority clinical contradictions flagged.
+                </p>
+              )}
+            </div>
+          </Panel>
+
+          {/* Recent Medical Events Panel */}
+          <Panel>
+            <PanelHeader
+              title="Recent Medical Events"
+              actions={
+                <Link
+                  href="/timeline"
+                  className="text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Full Timeline ({recentEvents.length})
+                </Link>
+              }
+            />
+            <div className="flex flex-col divide-y divide-neutral-100 p-4">
+              {recentEvents.map((ev) => (
+                <div key={ev.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded bg-neutral-100 text-neutral-700">
+                      <Calendar className="size-3.5" />
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-[13px] font-semibold text-neutral-900">{ev.title}</span>
+                      <span className="text-xs text-neutral-600">{ev.summary}</span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-neutral-500 shrink-0">{ev.date}</span>
+                </div>
+              ))}
+              {recentEvents.length === 0 && (
+                <p className="py-4 text-center text-xs text-neutral-500">
+                  No medical timeline events recorded yet.
+                </p>
+              )}
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      {/* Account Security & Data Management */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        {/* Security & Sessions */}
         <Panel>
-          <PanelHeader title="Security" className="py-3" />
-          <div className="flex flex-col gap-3.5 px-[18px] pt-[15px] pb-4">
+          <PanelHeader title="Security & Authentication" />
+          <div className="flex flex-col gap-3.5 p-4">
             {securityToggles.map((item) => (
-              <div key={item.id} className="flex w-full items-center gap-3.5">
+              <div key={item.id} className="flex w-full items-center justify-between gap-3.5">
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-sm leading-5 font-medium text-neutral-800">
-                    {item.title}
-                  </span>
-                  <span className="text-xs leading-4 font-medium text-neutral-500">
-                    {item.description}
-                  </span>
+                  <span className="text-sm font-medium text-neutral-800">{item.title}</span>
+                  <span className="text-xs text-neutral-500">{item.description}</span>
                 </span>
                 <Switch
                   checked={toggles[item.id]}
@@ -296,252 +547,131 @@ export function ProfileView() {
                     setToggles((current) => ({ ...current, [item.id]: checked }))
                   }
                   aria-label={item.title}
-                  className="data-[checked]:bg-brand-600"
                 />
               </div>
             ))}
-
-            <div className="h-px w-full bg-neutral-200" />
-            <p className="type-overline text-neutral-500">ACTIVE SESSIONS</p>
-
-            {sessions.map((session) => {
-              const Icon = session.current ? Monitor : Smartphone;
-              return (
-                <div
-                  key={session.id}
-                  className="flex w-full items-center gap-3 rounded-[9px] bg-neutral-50 px-3.5 py-[11px]"
-                >
-                  <Icon
-                    className="size-4 shrink-0 text-neutral-600"
-                    strokeWidth={1.8}
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
-                      {session.device}
-                    </span>
-                    <span className="text-xs leading-4 font-medium text-neutral-500">
-                      {session.location} · {session.lastActive}
-                    </span>
-                  </span>
-                  {session.current ? (
-                    <span className="type-overline shrink-0 rounded-full bg-status-ok-bg px-2.5 py-[3px] text-status-ok">
-                      THIS DEVICE
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSessions((current) =>
-                          current.filter((item) => item.id !== session.id)
-                        )
-                      }
-                      className="shrink-0 cursor-pointer text-[13px] leading-[18px] font-medium text-risk-high hover:underline"
-                    >
-                      Sign out
-                    </button>
-                  )}
-                </div>
-              );
-            })}
           </div>
         </Panel>
-      </div>
 
-      <div className="flex w-full flex-col gap-3.5 xl:w-[380px] xl:shrink-0">
-        {/* panel · Your data (38:1549) */}
+        {/* Data Ownership & Export */}
         <Panel>
-          <PanelHeader title="Your data" className="py-3" />
-          <div className="flex flex-col gap-3.5 px-[18px] pt-[15px] pb-4">
-            <div className="flex w-full gap-3">
-              <div className="flex flex-1 flex-col gap-0.5">
-                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-                  {docCount !== null ? docCount : "0"}
-                </span>
-                <span className="type-overline text-neutral-500">
-                  DOCUMENTS
-                </span>
-              </div>
-              <div className="flex flex-1 flex-col gap-0.5">
-                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-                  {docCount !== null && docCount > 0 ? "—" : "0"}
-                </span>
-                <span className="type-overline text-neutral-500">
-                  EXTRACTED EVENTS
-                </span>
-              </div>
-              <div className="flex flex-1 flex-col gap-0.5">
-                <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-                  {docCount !== null && docCount > 0 ? "—" : "0"}
-                </span>
-                <span className="type-overline text-neutral-500">
-                  ACTIVE MEDICATIONS
-                </span>
-              </div>
-            </div>
-
-            {dataActions.map((action) => {
-              const Icon = action.id === "export" ? Download : FileClock;
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  onClick={() => runDataAction(action.id)}
-                  className="flex w-full cursor-pointer items-center gap-3 rounded-[9px] border border-neutral-200 bg-neutral-0 px-[13px] py-[11px] text-left transition-colors hover:bg-neutral-50"
-                >
-                  <Icon
-                    className="size-4 shrink-0 text-brand-700"
-                    strokeWidth={1.8}
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
-                      {action.title}
-                    </span>
-                    <span className="text-xs leading-4 font-medium text-neutral-500">
-                      {action.description}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-
-            {status && (
-              <p
-                role="status"
-                className="rounded-md bg-neutral-50 px-3 py-2 text-xs leading-4 text-neutral-600"
+          <PanelHeader title="Patient Data Governance" />
+          <div className="flex flex-col gap-3.5 p-4">
+            <p className="text-xs leading-5 text-neutral-600">
+              MediGuardian AI enforces strict row-level isolation. You own your clinical data and can export it or purge it at any time.
+            </p>
+            <div className="flex flex-wrap gap-2.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runDataAction("export")}
+                className="gap-1.5 text-xs"
               >
+                <Download className="size-3.5" />
+                Export Full Health Data (JSON)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDanger("documents")}
+                className="border-risk-high-border text-risk-high hover:bg-risk-high-bg text-xs"
+              >
+                Purge Uploaded Documents
+              </Button>
+            </div>
+            {status && (
+              <p className="rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-700">
                 {status}
               </p>
             )}
           </div>
         </Panel>
-
-        {/* panel · isolation (38:1580) */}
-        <div className="flex w-full flex-1 flex-col gap-[11px] rounded-xl border border-brand-200 bg-sidebar-bg px-4 py-[15px]">
-          <div className="flex items-center gap-[9px]">
-            <Lock className="size-4 shrink-0 text-brand-700" strokeWidth={1.8} />
-            <p className="type-overline text-brand-700">
-              HOW YOUR RECORDS ARE ISOLATED
-            </p>
-          </div>
-          {isolationNotes.map((note) => (
-            <div key={note.title} className="flex w-full flex-col gap-[3px]">
-              <p className="text-[13px] leading-[18px] font-medium text-sidebar-ink">
-                {note.title}
-              </p>
-              <p className="text-xs leading-4 font-medium text-sidebar-ink-muted">
-                {note.description}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* panel · danger (38:1598) */}
-        <div className="flex w-full flex-col gap-[11px] rounded-xl border border-risk-high-border bg-risk-high-bg px-4 pt-3.5 pb-[15px]">
-          <p className="type-overline text-risk-high">DELETE YOUR DATA</p>
-          <p className="text-xs leading-4 font-medium text-neutral-700">
-            {deleteDataNote}
-          </p>
-          <div className="flex flex-wrap gap-[9px]">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDanger("documents")}
-              className="border-risk-high-border bg-neutral-0 px-3.5 py-[9px] text-risk-high hover:bg-risk-high-bg"
-            >
-              Delete all documents
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDanger("account")}
-              className="px-3.5 py-[9px]"
-            >
-              Delete account
-            </Button>
-          </div>
-        </div>
       </div>
 
-      {/* Edit profile */}
+      {/* Edit Profile Modal Dialog */}
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="max-w-[420px] gap-4 p-6">
-          <div className="flex flex-col gap-1">
-            <DialogTitle className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-              Edit profile
-            </DialogTitle>
-            <DialogDescription className="text-[13px] leading-[19px] text-neutral-500">
-              Changes are saved to your account only.
-            </DialogDescription>
-          </div>
-          <form className="flex flex-col gap-4" onSubmit={handleSaveProfile}>
-            <Field label="FULL NAME" htmlFor="fullName">
+        <DialogContent className="max-w-md">
+          <DialogTitle>Edit Patient Profile</DialogTitle>
+          <DialogDescription>
+            Update your demographic and patient contact details.
+          </DialogDescription>
+          <form onSubmit={handleSaveProfile} className="mt-4 flex flex-col gap-3.5">
+            <Field label="Legal Full Name">
               <input
-                id="fullName"
+                type="text"
                 value={editForm.fullName}
-                onChange={(event) =>
-                  setEditForm({ ...editForm, fullName: event.target.value })
+                onChange={(e) =>
+                  setEditForm({ ...editForm, fullName: e.target.value })
                 }
                 className={fieldInputClass}
-                placeholder="Enter full name"
+                required
               />
             </Field>
-            <Field label="EMAIL" htmlFor="profileEmail">
+            <Field label="Phone Number">
               <input
-                id="profileEmail"
-                type="email"
-                disabled
-                value={profile.email}
-                className={`${fieldInputClass} opacity-70 cursor-not-allowed`}
-              />
-            </Field>
-            <Field label="PHONE" htmlFor="profilePhone">
-              <input
-                id="profilePhone"
+                type="tel"
                 value={editForm.phone}
-                onChange={(event) =>
-                  setEditForm({ ...editForm, phone: event.target.value })
+                onChange={(e) =>
+                  setEditForm({ ...editForm, phone: e.target.value })
                 }
                 className={fieldInputClass}
-                placeholder="Enter phone number"
+                placeholder="+1 (555) 000-0000"
               />
             </Field>
-            <div className="flex justify-end gap-2.5">
+            <Field label="Date of Birth">
+              <input
+                type="date"
+                value={editForm.dateOfBirth}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, dateOfBirth: e.target.value })
+                }
+                className={fieldInputClass}
+              />
+            </Field>
+            <Field label="Preferred Language">
+              <input
+                type="text"
+                value={editForm.language}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, language: e.target.value })
+                }
+                className={fieldInputClass}
+              />
+            </Field>
+            <div className="mt-2 flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setEditing(false);
-                }}
+                onClick={() => setEditing(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit">Save changes</Button>
+              <Button type="submit">Save Changes</Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Destructive confirmation */}
-      <Dialog open={danger !== null} onOpenChange={(open) => !open && setDanger(null)}>
-        <DialogContent className="max-w-[420px] gap-4 p-6">
-          <div className="flex flex-col gap-1">
-            <DialogTitle className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
-              {danger === "account" ? "Delete account" : "Delete all documents"}
-            </DialogTitle>
-            <DialogDescription className="text-[13px] leading-[19px] text-neutral-600">
-              {deleteDataNote}
-            </DialogDescription>
-          </div>
-          <div className="flex justify-end gap-2.5">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDanger(null)}
-            >
+      {/* Danger Action Confirmation Dialog */}
+      <Dialog open={Boolean(danger)} onOpenChange={(open) => !open && setDanger(null)}>
+        <DialogContent className="max-w-md">
+          <DialogTitle className="text-risk-high">
+            {danger === "account" ? "Delete Patient Account?" : "Purge Medical Documents?"}
+          </DialogTitle>
+          <DialogDescription>
+            {danger === "account"
+              ? "This will permanently delete your patient profile, documents, and all extracted intelligence. This action cannot be undone."
+              : "This will delete all uploaded medical files and associated extracted records from your account."}
+          </DialogDescription>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDanger(null)}>
               Cancel
             </Button>
-            <Button type="button" variant="destructive" onClick={runDangerAction}>
-              {danger === "account" ? "Delete account" : "Delete documents"}
+            <Button
+              onClick={runDangerAction}
+              className="bg-risk-high text-neutral-0 hover:bg-risk-high/90"
+            >
+              Confirm Deletion
             </Button>
           </div>
         </DialogContent>

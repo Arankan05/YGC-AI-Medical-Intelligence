@@ -18,16 +18,30 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_application_user
 from app.db.database import get_db
+from app.models.ai_analysis import AIAnalysis
+from app.models.allergy import Allergy
 from app.models.document import Document
+from app.models.finding import Finding
+from app.models.lab_result import LabResult
+from app.models.medical_event import MedicalEvent
 from app.models.patient import Patient
+from app.models.prescription import Prescription
 from app.models.user import User
 from app.schemas.document import (
     DocumentDeleteResponse,
+    DocumentDetailResponse,
     DocumentListResponse,
     DocumentProcessResponse,
     DocumentResponse,
 )
 from app.schemas.extraction import MedicalExtractionResponse
+from app.schemas.records import (
+    AllergyRecordResponse,
+    FindingRecordResponse,
+    LabResultRecordResponse,
+    MedicalEventRecordResponse,
+    MedicationRecordResponse,
+)
 from app.services.document_processing_service import (
     DocumentProcessingService,
     get_document_processing_service,
@@ -287,17 +301,17 @@ def list_documents(
 
 @router.get(
     "/{document_id}",
-    response_model=DocumentResponse,
-    summary="Get medical document metadata",
-    description="Retrieves metadata for a specific document. Enforces ownership: returns 404 if not found, 403 if unauthorized.",
+    response_model=DocumentDetailResponse,
+    summary="Get medical document metadata and extracted intelligence",
+    description="Retrieves metadata and all associated extracted clinical entities for a specific document.",
 )
 def get_document(
     document_id: UUID,
     current_user: User = Depends(get_current_application_user),
     db: Session = Depends(get_db),
-) -> DocumentResponse:
+) -> DocumentDetailResponse:
     """
-    Retrieves document metadata for a single document.
+    Retrieves document metadata and all associated extracted entities for a single document.
     Validates ownership chain: User -> Patient -> Document.
     """
     patient = get_patient_for_user(current_user, db)
@@ -321,7 +335,138 @@ def get_document(
             detail="You do not have permission to access this document.",
         )
 
-    return DocumentResponse.model_validate(document)
+    # 1. Associated Prescriptions / Medications
+    prescriptions = (
+        db.query(Prescription)
+        .filter(Prescription.document_id == document_id)
+        .all()
+    )
+    med_records = [
+        MedicationRecordResponse(
+            id=p.id,
+            medication_id=p.medication_id,
+            name=p.medication.name if p.medication else "Unknown Medication",
+            normalized_name=p.medication.normalized_name if p.medication else None,
+            dosage=p.dosage,
+            frequency=p.frequency,
+            start_date=p.start_date,
+            end_date=p.end_date,
+            instructions=p.instructions,
+            source_document_id=document.id,
+            source_document_name=document.file_name,
+            created_at=p.created_at,
+        )
+        for p in prescriptions
+    ]
+
+    # 2. Associated Lab Results
+    labs = db.query(LabResult).filter(LabResult.document_id == document_id).all()
+    lab_records = [
+        LabResultRecordResponse(
+            id=l.id,
+            test_name=l.test_name,
+            value=l.value,
+            unit=l.unit,
+            reference_range=l.reference_range,
+            result_date=l.result_date,
+            source_document_id=document.id,
+            source_document_name=document.file_name,
+            created_at=l.created_at,
+        )
+        for l in labs
+    ]
+
+    # 3. Associated Allergies
+    allergies = db.query(Allergy).filter(Allergy.source_document_id == document_id).all()
+    allergy_records = [
+        AllergyRecordResponse(
+            id=a.id,
+            medication_name=a.medication_name,
+            normalized_medication_name=a.normalized_medication_name,
+            reaction=a.reaction,
+            severity=a.severity,
+            source_document_id=document.id,
+            created_at=a.created_at,
+        )
+        for a in allergies
+    ]
+
+    # 4. Associated Medical Events
+    events = (
+        db.query(MedicalEvent)
+        .filter(MedicalEvent.document_id == document_id)
+        .order_by(MedicalEvent.event_date.desc())
+        .all()
+    )
+    event_records = [
+        MedicalEventRecordResponse(
+            id=e.id,
+            event_type=e.event_type,
+            event_date=e.event_date,
+            title=e.title,
+            description=e.description,
+            source_document_id=document.id,
+            source_document_name=document.file_name,
+            created_at=e.created_at,
+        )
+        for e in events
+    ]
+
+    # 5. Patient Findings
+    findings = (
+        db.query(Finding)
+        .filter(Finding.patient_id == patient.id)
+        .order_by(Finding.created_at.desc())
+        .all()
+    )
+    finding_records = [
+        FindingRecordResponse(
+            id=f.id,
+            finding_type=f.finding_type,
+            title=f.title,
+            description=f.description,
+            risk_level=f.risk_level,
+            confidence=f.confidence,
+            recommendation=f.recommendation,
+            created_at=f.created_at,
+        )
+        for f in findings
+    ]
+
+    # 6. Latest AI analysis summary
+    latest_analysis = (
+        db.query(AIAnalysis)
+        .filter(AIAnalysis.patient_id == patient.id)
+        .order_by(AIAnalysis.created_at.desc())
+        .first()
+    )
+    ai_summary = None
+    ai_confidence = None
+    if latest_analysis and isinstance(latest_analysis.result, dict):
+        ai_summary = latest_analysis.result.get("summary")
+        ai_confidence = latest_analysis.confidence
+
+    return DocumentDetailResponse(
+        id=document.id,
+        patient_id=document.patient_id,
+        file_name=document.file_name,
+        file_path=document.file_path,
+        document_type=document.document_type,
+        processing_status=document.processing_status,
+        uploaded_at=document.uploaded_at,
+        processed_at=document.processed_at,
+        error_message=document.error_message,
+        extraction_method=document.extraction_method,
+        page_count=document.page_count,
+        extracted_text=document.extracted_text,
+        medications=med_records,
+        findings=finding_records,
+        lab_results=lab_records,
+        allergies=allergy_records,
+        events=event_records,
+        ai_summary=ai_summary,
+        ai_confidence=ai_confidence,
+    )
 
 
 @router.delete(

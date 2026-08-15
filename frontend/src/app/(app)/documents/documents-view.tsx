@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { FileText, FileWarning, Info, Loader2, Trash2, Upload } from "lucide-react";
+import { FileText, FileWarning, Info, Loader2, Sparkles, Trash2, Upload } from "lucide-react";
 
 import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { StatusPill } from "@/components/status-pill";
@@ -27,7 +27,9 @@ export function DocumentsView() {
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [extractingId, setExtractingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   function fetchDocuments() {
     setLoading(true);
@@ -47,6 +49,22 @@ export function DocumentsView() {
   useEffect(() => {
     fetchDocuments();
   }, []);
+
+  async function handleExtract(docId: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    setExtractingId(docId);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await api().extractDocument(docId);
+      setSuccessMsg("Medical intelligence successfully extracted and persisted to your records!");
+      fetchDocuments();
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setExtractingId(null);
+    }
+  }
 
   async function handleDelete(docId: string, event: React.MouseEvent) {
     event.stopPropagation();
@@ -97,6 +115,22 @@ export function DocumentsView() {
         </Button>
       </div>
 
+      {successMsg && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-md border border-status-ok-border bg-status-ok-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-status-ok"
+        >
+          <span>{successMsg}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessMsg(null)}
+            className="text-xs font-semibold text-status-ok underline hover:opacity-80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {error && (
         <div
           role="alert"
@@ -145,8 +179,8 @@ export function DocumentsView() {
                 <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
                   STATUS
                 </th>
-                <th className="type-overline w-[70px] px-3 py-3 text-right text-neutral-500">
-                  ACTION
+                <th className="type-overline w-[130px] px-3 py-3 text-right text-neutral-500">
+                  ACTIONS
                 </th>
               </tr>
             </thead>
@@ -166,10 +200,12 @@ export function DocumentsView() {
                 rows.map((document) => {
                   const failed = document.status === "failed";
                   const isDeleting = deletingId === document.id;
+                  const isExtracting = extractingId === document.id;
                   return (
                     <tr
                       key={document.id}
-                      className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
+                      onClick={() => router.push(`/documents/${document.id}`)}
+                      className="group cursor-pointer border-t border-neutral-200 transition-colors hover:bg-neutral-50"
                     >
                       <td className="px-[18px] py-[13px]">
                         <div className="flex items-center gap-3">
@@ -190,7 +226,7 @@ export function DocumentsView() {
                             )}
                           </span>
                           <span className="flex flex-col gap-0.5">
-                            <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
+                            <span className="text-[13px] leading-[18px] font-medium text-neutral-900 group-hover:text-brand-700 group-hover:underline">
                               {document.title}
                             </span>
                             <span className="text-xs leading-4 font-medium text-neutral-500">
@@ -212,16 +248,33 @@ export function DocumentsView() {
                         <StatusPill status={document.status} />
                       </td>
                       <td className="px-3 py-[13px] text-right">
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          onClick={(e) => handleDelete(document.id, e)}
-                          className="inline-flex size-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-risk-high-bg hover:text-risk-high disabled:opacity-50"
-                          title="Delete document"
-                          aria-label={`Delete ${document.title}`}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={isExtracting || failed}
+                            onClick={(e) => handleExtract(document.id, e)}
+                            className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
+                            title="Extract and persist medical structured intelligence with AI"
+                            aria-label={`Extract ${document.title} with AI`}
+                          >
+                            {isExtracting ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="size-3" />
+                            )}
+                            <span>{isExtracting ? "Extracting..." : "Extract AI"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={(e) => handleDelete(document.id, e)}
+                            className="inline-flex size-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-risk-high-bg hover:text-risk-high disabled:opacity-50"
+                            title="Delete document"
+                            aria-label={`Delete ${document.title}`}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

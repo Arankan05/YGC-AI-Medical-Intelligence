@@ -7,6 +7,8 @@ import {
   MapPin,
   MessageCircle,
   Pill,
+  ShieldAlert,
+  Sparkles,
   User,
   type LucideIcon,
 } from "lucide-react";
@@ -32,7 +34,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Timeline", href: "/timeline", icon: Activity },
       { label: "Medications", href: "/medications", icon: Pill },
       { label: "Lab Results", href: "/lab-results", icon: Beaker },
+      { label: "Allergies", href: "/allergies", icon: ShieldAlert },
       { label: "AI Findings", href: "/findings", icon: AlertTriangle },
+      { label: "AI Analysis", href: "/analyses", icon: Sparkles },
     ],
   },
   {

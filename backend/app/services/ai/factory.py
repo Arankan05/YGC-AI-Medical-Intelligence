@@ -26,6 +26,7 @@ def get_ai_provider(provider_name: Optional[str] = None) -> BaseAIProvider:
     if selected_provider == "gemini":
         return GeminiAIProvider(
             api_key=settings.AI_API_KEY,
+            model_name=settings.AI_MODEL or "gemini-3.5-flash-lite",
         )
     elif selected_provider == "mock":
         return MockAIProvider()
@@ -36,6 +37,7 @@ def get_ai_provider(provider_name: Optional[str] = None) -> BaseAIProvider:
         )
         return GeminiAIProvider(
             api_key=settings.AI_API_KEY,
+            model_name=settings.AI_MODEL or "gemini-3.5-flash-lite",
         )
 
 

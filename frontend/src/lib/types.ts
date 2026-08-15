@@ -30,11 +30,25 @@ export interface MedicalDocument {
   provider: string;
   documentDate: string;
   uploadedAt: string;
+  processedAt?: string;
   pages: number;
   sizeLabel: string;
   status: DocumentStatus;
   source: "digital" | "scanned";
   extractedItems?: number;
+}
+
+export interface DocumentDetail extends MedicalDocument {
+  extractedText?: string;
+  extractionMethod?: string;
+  pageCount?: number;
+  medications: Medication[];
+  findings: Finding[];
+  labResults: LabResult[];
+  allergies: AllergyRecord[];
+  events: TimelineEvent[];
+  aiSummary?: string;
+  aiConfidence?: number;
 }
 
 export type PipelineStepStatus = "done" | "active" | "pending" | "failed";
@@ -85,8 +99,48 @@ export interface Medication {
   startedOn: string;
   prescribedBy: string;
   sourceDocumentId: string;
+  sourceDocumentName?: string;
+  instructions?: string;
   status: "active" | "stopped";
   flags: MedicationFlagKind[];
+}
+
+export interface MedicalOverview {
+  patientId: string;
+  totalDocuments: number;
+  totalMedications: number;
+  totalFindings: number;
+  totalEvents: number;
+  totalLabResults: number;
+  totalAllergies: number;
+  latestSummary?: string;
+  confidenceScore?: number;
+  recentEvents: TimelineEvent[];
+  activeMedications: Medication[];
+  priorityFindings: Finding[];
+}
+
+export interface AllergyRecord {
+  id: string;
+  medicationName: string;
+  normalizedMedicationName: string;
+  reaction?: string;
+  severity?: "mild" | "moderate" | "severe" | string;
+  sourceDocumentId?: string;
+  sourceDocumentName?: string;
+  recordedDate: string;
+  createdAt: string;
+}
+
+export interface AIAnalysisRecord {
+  id: string;
+  analysisType: string;
+  result: Record<string, unknown>;
+  confidence?: number;
+  relatedFindingId?: string;
+  relatedFindingTitle?: string;
+  summary?: string;
+  createdAt: string;
 }
 
 export type MedicationFlagKind =
