@@ -178,6 +178,27 @@ export interface MedicationSafetyReport {
   issues: CrossCheckIssue[];
 }
 
+/**
+ * Backend classification of one value against its reference range
+ * (`LabResultAnalysisResponse.status`).
+ *
+ * UNKNOWN is a real, distinct state — the value or the range could not be read
+ * unambiguously. It must never be rendered as NORMAL, "OK" or 0.
+ */
+export type LabStatus = "NORMAL" | "HIGH" | "LOW" | "UNKNOWN";
+
+/**
+ * Backend historical direction for a test (`LabTrendResponse.trend`).
+ *
+ * INSUFFICIENT_DATA means fewer than two numeric points exist, which is not the
+ * same claim as STABLE and must never be displayed as it.
+ */
+export type LabTrendDirection =
+  | "INCREASING"
+  | "DECREASING"
+  | "STABLE"
+  | "INSUFFICIENT_DATA";
+
 export interface LabResult {
   id: string;
   name: string;
@@ -185,25 +206,64 @@ export interface LabResult {
   referenceRange: string;
   referenceLow?: number;
   referenceHigh?: number;
-  latestValue: number;
-  /** Preserves trailing zeros the lab reported, e.g. "1.0". */
+  /**
+   * The exact number the laboratory reported, or null when the value is
+   * censored ("<0.01"), locale-ambiguous ("1,200") or otherwise unreadable.
+   * Never substitute 0 — that is a measurement the lab did not make.
+   */
+  latestValue: number | null;
+  /** Exactly what the lab reported, preserving "<0.01" and trailing zeros. */
   latestValueLabel: string;
   latestDate: string;
   sourceDocument: string;
-  trend: "rising" | "falling" | "stable";
-  /** Drives the pill colour: ok = green, medium = amber, high = red. */
-  severity: "ok" | "medium" | "high";
-  /** e.g. "Below range", "Above range", "Normal". */
-  statusLabel: string;
-  /** e.g. "Declining · 3 tests". */
-  trendLabel: string;
-  points: LabPoint[];
+  sourceDocumentId: string | null;
+  trend: LabTrendDirection;
+  status: LabStatus;
+  points: LabTrendPoint[];
 }
 
+/**
+ * Legacy Figma point type, consumed only by the pre-existing `Sparkline` and
+ * `LabTrendChart` components. Left exactly as-is so those components keep their
+ * current API; lab intelligence uses `LabTrendPoint` instead.
+ */
 export interface LabPoint {
   date: string;
   value: number;
   documentId: string;
+}
+
+/**
+ * One historical point from /api/lab-intelligence, mapped from
+ * `LabTrendPointResponse`.
+ *
+ * Distinct from `LabPoint` because a laboratory point legitimately has no exact
+ * number: a censored "<0.01" or an ambiguous "1,200" carries `value: null`.
+ * Substituting 0 would assert a measurement the laboratory never made.
+ */
+export interface LabTrendPoint {
+  date: string;
+  /** null when this point carries no exact number. Never rendered as 0. */
+  value: number | null;
+  /** Exactly what the lab reported for this point, e.g. "<0.01". */
+  valueLabel: string;
+  status: LabStatus;
+  documentId: string | null;
+  documentName: string | null;
+}
+
+/** GET /api/lab-intelligence/trends/{test_name} */
+export interface LabTrend {
+  testName: string;
+  unit: string | null;
+  trend: LabTrendDirection;
+  points: LabTrendPoint[];
+}
+
+/** GET /api/lab-intelligence/overview */
+export interface LabIntelligenceOverview {
+  results: LabResult[];
+  availableTests: string[];
 }
 
 export interface EvidenceReference {
