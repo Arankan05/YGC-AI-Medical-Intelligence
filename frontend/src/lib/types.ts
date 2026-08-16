@@ -160,6 +160,24 @@ export interface CrossCheckIssue {
   confidence: number;
 }
 
+/**
+ * Result of the deterministic medication safety check.
+ *
+ * Each detected issue is a `CrossCheckIssue`, so the medications screen renders
+ * safety data from the engine with no separate shape of its own.
+ */
+export interface MedicationSafetyReport {
+  /** Date the engine used to decide which prescriptions count as active. */
+  referenceDate: string;
+  activeMedicationCount: number;
+  /** Normalized generic names of the medications that were analysed. */
+  activeMedications: string[];
+  findingCount: number;
+  /** Highest risk present, or null when no issues were detected. */
+  highestRiskLevel: RiskLevel | null;
+  issues: CrossCheckIssue[];
+}
+
 export interface LabResult {
   id: string;
   name: string;

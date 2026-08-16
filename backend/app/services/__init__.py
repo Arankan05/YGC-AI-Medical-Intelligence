@@ -29,6 +29,35 @@ from app.services.medical_persistence_service import (
     MedicalPersistenceService,
     get_medical_persistence_service,
 )
+from app.services.medication_interactions import (
+    MedicationInteraction,
+    check_interaction,
+    get_known_interactions,
+    has_interaction,
+    normalize_medication_name,
+)
+from app.services.medication_dosage_rules import (
+    DosageAmount,
+    DosageExceedance,
+    DosageLimit,
+    check_dosage,
+    get_dosage_limit,
+    get_known_dosage_limits,
+    is_dosage_evaluable,
+    parse_dosage,
+)
+from app.services.medication_safety_persistence_service import (
+    MedicationSafetyPersistenceResult,
+    MedicationSafetyPersistenceService,
+    get_medication_safety_persistence_service,
+)
+from app.services.medication_safety_service import (
+    MedicationSafetyFinding,
+    MedicationSafetyReport,
+    MedicationSafetyService,
+    get_medication_safety_service,
+    is_prescription_active,
+)
 from app.services.ocr_service import (
     ImageOCRResult,
     InvalidImageError,
@@ -112,6 +141,27 @@ __all__ = [
     "get_medical_extraction_service",
     "MedicalPersistenceService",
     "get_medical_persistence_service",
+    "MedicationInteraction",
+    "check_interaction",
+    "get_known_interactions",
+    "has_interaction",
+    "normalize_medication_name",
+    "MedicationSafetyFinding",
+    "MedicationSafetyReport",
+    "MedicationSafetyService",
+    "get_medication_safety_service",
+    "is_prescription_active",
+    "MedicationSafetyPersistenceResult",
+    "MedicationSafetyPersistenceService",
+    "get_medication_safety_persistence_service",
+    "DosageAmount",
+    "DosageExceedance",
+    "DosageLimit",
+    "check_dosage",
+    "get_dosage_limit",
+    "get_known_dosage_limits",
+    "is_dosage_evaluable",
+    "parse_dosage",
 ]
 
 

@@ -54,13 +54,14 @@ export function MedicationsView() {
   function loadData() {
     setLoading(true);
     setError(null);
-    Promise.all([
-      api().listMedications(),
-      api().listCrossCheckIssues(),
-    ])
-      .then(([meds, issues]) => {
+    // The safety check runs once and is reused for both the cross-check summary
+    // and the per-medication flags, so the endpoint is not requested twice.
+    api()
+      .runMedicationSafetyCheck()
+      .then(async (report) => {
+        const meds = await api().listMedications(report);
         setMedications(meds || []);
-        setCrossChecks(issues || []);
+        setCrossChecks(report.issues || []);
         setLoading(false);
       })
       .catch((err) => {
@@ -87,8 +88,8 @@ export function MedicationsView() {
     setRerunning(true);
     setError(null);
     try {
-      const issues = await api().listCrossCheckIssues();
-      setCrossChecks(issues || []);
+      const report = await api().runMedicationSafetyCheck();
+      setCrossChecks(report.issues || []);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
