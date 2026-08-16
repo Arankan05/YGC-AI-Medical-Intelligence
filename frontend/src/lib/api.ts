@@ -20,6 +20,7 @@ import type {
   MedicalOverview,
   Medication,
   MedicationFlagKind,
+  MedicationSafetyReport,
   Provider,
   ProviderSearchParams,
   RiskLevel,
@@ -76,8 +77,13 @@ export interface MediGuardianApi {
 
   getOverview(): Promise<MedicalOverview>;
   listTimeline(): Promise<TimelineEvent[]>;
-  listMedications(): Promise<Medication[]>;
+  /**
+   * Pass an already-fetched safety report to derive medication flags from it,
+   * so a caller that also needs the report does not request it twice.
+   */
+  listMedications(safetyReport?: MedicationSafetyReport): Promise<Medication[]>;
   listCrossCheckIssues(): Promise<CrossCheckIssue[]>;
+  runMedicationSafetyCheck(): Promise<MedicationSafetyReport>;
   listLabResults(): Promise<LabResult[]>;
   listFindings(): Promise<Finding[]>;
   listAllergies(): Promise<AllergyRecord[]>;
@@ -187,6 +193,138 @@ function mapDocument(doc: BackendDocumentResponse): MedicalDocument {
   };
 }
 
+const FLAG_KINDS: MedicationFlagKind[] = [
+  "interaction",
+  "duplicate",
+  "dosage",
+  "allergy",
+];
+
+function mapRiskLevel(value?: string | null): RiskLevel {
+  const risk = (value || "low").toLowerCase();
+  return risk === "high" || risk === "medium" || risk === "low"
+    ? (risk as RiskLevel)
+    : "low";
+}
+
+function mapFlagKind(kind: string, findingType: string): MedicationFlagKind {
+  const value = (kind || "").toLowerCase();
+  if ((FLAG_KINDS as string[]).includes(value)) {
+    return value as MedicationFlagKind;
+  }
+  // Fall back to the finding_type substrings the findings mapper already reads.
+  const type = (findingType || "").toLowerCase();
+  if (type.includes("allergy")) return "allergy";
+  if (type.includes("duplicate")) return "duplicate";
+  if (type.includes("dosage")) return "dosage";
+  return "interaction";
+}
+
+interface BackendSafetyIssueResponse {
+  id: string;
+  kind: string;
+  finding_type: string;
+  risk_level: string;
+  title: string;
+  medications?: string[] | null;
+  description: string;
+  recommendation?: string | null;
+  confidence?: number | null;
+}
+
+interface BackendMedicationSafetyReportResponse {
+  reference_date: string;
+  active_medication_count?: number;
+  active_medications?: string[] | null;
+  finding_count?: number;
+  highest_risk_level?: string | null;
+  issues?: BackendSafetyIssueResponse[] | null;
+}
+
+function mapSafetyIssue(item: BackendSafetyIssueResponse): CrossCheckIssue {
+  return {
+    id: String(item.id),
+    kind: mapFlagKind(item.kind, item.finding_type),
+    risk: mapRiskLevel(item.risk_level),
+    title: item.title || "Medication safety issue",
+    medications: item.medications || [],
+    explanation: item.description || "",
+    recommendation:
+      item.recommendation || "Discuss this with your doctor or pharmacist.",
+    // The backend already reports confidence as a 0–1 fraction.
+    confidence: typeof item.confidence === "number" ? item.confidence : 0.9,
+  };
+}
+
+function mapMedicationSafetyReport(
+  data: BackendMedicationSafetyReportResponse
+): MedicationSafetyReport {
+  const issues = (data.issues || []).map(mapSafetyIssue);
+  return {
+    referenceDate: formatDate(data.reference_date),
+    activeMedicationCount: data.active_medication_count || 0,
+    activeMedications: data.active_medications || [],
+    findingCount: data.finding_count ?? issues.length,
+    highestRiskLevel: data.highest_risk_level
+      ? mapRiskLevel(data.highest_risk_level)
+      : null,
+    issues,
+  };
+}
+
+function emptyMedicationSafetyReport(): MedicationSafetyReport {
+  return {
+    referenceDate: formatDate(null),
+    activeMedicationCount: 0,
+    activeMedications: [],
+    findingCount: 0,
+    highestRiskLevel: null,
+    issues: [],
+  };
+}
+
+function normalizeMedicationKey(value?: string | null): string {
+  return (value || "").trim().toLowerCase();
+}
+
+/**
+ * Indexes safety issues by the medications they involve, so each medication row
+ * can show its own flags.
+ *
+ * Issues carry both the display names recorded on the source document and a
+ * stable id whose suffix holds the normalized generic names, e.g.
+ * "drug_interaction:aspirin+warfarin". Both are indexed, so a medication matches
+ * whether it was recorded under a generic or a brand label.
+ */
+function buildMedicationFlagIndex(
+  issues: CrossCheckIssue[]
+): Map<string, MedicationFlagKind[]> {
+  const index = new Map<string, MedicationFlagKind[]>();
+
+  function add(key: string, kind: MedicationFlagKind) {
+    if (!key) return;
+    const existing = index.get(key);
+    if (!existing) {
+      index.set(key, [kind]);
+    } else if (!existing.includes(kind)) {
+      existing.push(kind);
+    }
+  }
+
+  for (const issue of issues) {
+    for (const name of issue.medications) {
+      add(normalizeMedicationKey(name), issue.kind);
+    }
+    const separator = issue.id.indexOf(":");
+    const subject = separator >= 0 ? issue.id.slice(separator + 1) : "";
+    for (const token of subject.split("+")) {
+      add(normalizeMedicationKey(token), issue.kind);
+    }
+  }
+
+  return index;
+}
+
 interface BackendMedicationResponse {
   id: string;
   name: string;
@@ -202,8 +340,18 @@ interface BackendMedicationResponse {
   created_at: string;
 }
 
-function mapMedication(item: BackendMedicationResponse): Medication {
-  const flags: MedicationFlagKind[] = [];
+function mapMedication(
+  item: BackendMedicationResponse,
+  flagIndex?: Map<string, MedicationFlagKind[]>
+): Medication {
+  const flags: MedicationFlagKind[] = flagIndex
+    ? Array.from(
+        new Set([
+          ...(flagIndex.get(normalizeMedicationKey(item.name)) || []),
+          ...(flagIndex.get(normalizeMedicationKey(item.normalized_name)) || []),
+        ])
+      )
+    : [];
   return {
     id: String(item.id),
     name: item.name || "Medication",
@@ -659,7 +807,9 @@ const defaultApiImplementation: MediGuardianApi = {
       extractedText: data.extracted_text || undefined,
       extractionMethod: data.extraction_method || undefined,
       pageCount: data.page_count || baseDoc.pages,
-      medications: (data.medications || []).map(mapMedication),
+      medications: (data.medications || []).map((m: BackendMedicationResponse) =>
+        mapMedication(m)
+      ),
       findings: (data.findings || []).map(mapFinding),
       labResults: (data.lab_results || []).map(mapLabResult),
       allergies: (data.allergies || []).map(mapAllergy),
@@ -703,7 +853,9 @@ const defaultApiImplementation: MediGuardianApi = {
       latestSummary: data.latest_summary || undefined,
       confidenceScore: data.confidence_score ?? undefined,
       recentEvents: (data.recent_events || []).map(mapTimelineEvent),
-      activeMedications: (data.active_medications || []).map(mapMedication),
+      activeMedications: (data.active_medications || []).map(
+        (m: BackendMedicationResponse) => mapMedication(m)
+      ),
       priorityFindings: (data.priority_findings || []).map(mapFinding),
     };
   },
@@ -721,7 +873,9 @@ const defaultApiImplementation: MediGuardianApi = {
     return (data || []).map(mapTimelineEvent);
   },
 
-  async listMedications(): Promise<Medication[]> {
+  async listMedications(
+    safetyReport?: MedicationSafetyReport
+  ): Promise<Medication[]> {
     const res = await authFetch("/api/records/medications", { method: "GET" });
     if (res.status === 401) return [];
     if (!res.ok) {
@@ -731,30 +885,44 @@ const defaultApiImplementation: MediGuardianApi = {
       throw new Error(err.detail || "Failed to fetch medications.");
     }
     const data = await res.json();
-    return (data || []).map(mapMedication);
+
+    // Safety flags come from the medication safety engine. A caller that already
+    // holds a report passes it in; otherwise it is fetched here. A failure must
+    // not stop the medication list itself from rendering, so the flags are
+    // simply omitted if the check is unavailable.
+    let flagIndex: Map<string, MedicationFlagKind[]> | undefined;
+    try {
+      const report =
+        safetyReport ??
+        (await defaultApiImplementation.runMedicationSafetyCheck());
+      flagIndex = buildMedicationFlagIndex(report.issues);
+    } catch {
+      flagIndex = undefined;
+    }
+
+    return (data || []).map((item: BackendMedicationResponse) =>
+      mapMedication(item, flagIndex)
+    );
   },
 
   async listCrossCheckIssues(): Promise<CrossCheckIssue[]> {
-    const findings = await defaultApiImplementation.listFindings();
-    return findings
-      .filter((f) => f.risk === "high" || f.risk === "medium")
-      .map((f) => {
-        let kind: MedicationFlagKind = "interaction";
-        if (f.category === "allergy") kind = "allergy";
-        else if (f.category === "duplicate") kind = "duplicate";
-        else if (f.category === "dosage") kind = "dosage";
+    const report = await defaultApiImplementation.runMedicationSafetyCheck();
+    return report.issues;
+  },
 
-        return {
-          id: f.id,
-          kind,
-          risk: f.risk,
-          title: f.title,
-          medications: f.relatedMedications && f.relatedMedications.length > 0 ? f.relatedMedications : [f.title],
-          explanation: f.summary,
-          recommendation: f.recommendedAction || f.guidance,
-          confidence: f.confidence / 100,
-        };
-      });
+  async runMedicationSafetyCheck(): Promise<MedicationSafetyReport> {
+    const res = await authFetch("/api/medication-safety/check", {
+      method: "GET",
+    });
+    if (res.status === 401) return emptyMedicationSafetyReport();
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to run medication safety check." }));
+      throw new Error(err.detail || "Failed to run medication safety check.");
+    }
+    const data = await res.json();
+    return mapMedicationSafetyReport(data);
   },
 
   async listLabResults(): Promise<LabResult[]> {

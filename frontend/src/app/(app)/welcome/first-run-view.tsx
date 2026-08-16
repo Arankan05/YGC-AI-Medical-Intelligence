@@ -64,6 +64,7 @@ export function FirstRunView() {
           </p>
           <div className="flex flex-wrap items-center gap-2.5 pt-[5px]">
             <Button
+              nativeButton={false}
               render={<Link href="/documents/upload" />}
               className="gap-[9px] rounded-[9px] bg-brand-600 px-[18px] py-3 hover:bg-brand-700"
             >
@@ -71,6 +72,7 @@ export function FirstRunView() {
               Upload your first documents
             </Button>
             <Button
+              nativeButton={false}
               render={<Link href="#how-it-works" />}
               variant="outline"
               className="rounded-[9px] border-sidebar-ink bg-transparent px-[18px] py-3 text-sidebar-ink-muted hover:bg-white/40"
