@@ -65,3 +65,70 @@ def test_extract_from_text_ai_service_error():
     with pytest.raises(AIServiceError) as exc_info:
         service.extract_from_text("Some text")
     assert "Network dropped" in str(exc_info.value)
+
+
+def test_extract_from_text_with_malformed_dates_normalizes_to_none():
+    raw_ai_output = {
+        "document_type_detected": "lab_report",
+        "summary": "Blood chemistry panel showing lab results.",
+        "confidence_score": 0.95,
+        "events": [
+            {
+                "event_type": "lab_test",
+                "event_date": "200X-07-07",
+                "title": "Comprehensive Metabolic Panel",
+                "description": "Routine lab work.",
+            }
+        ],
+        "medications": [
+            {
+                "name": "Lipitor 20mg",
+                "start_date": "200X-07-07",
+                "end_date": "unknown",
+            }
+        ],
+        "lab_results": [
+            {
+                "test_name": "Fasting Blood Glucose",
+                "value": "105",
+                "unit": "mg/dL",
+                "reference_range": "70-99 mg/dL",
+                "result_date": "200X-07-07",
+            },
+            {
+                "test_name": "Hemoglobin A1c",
+                "value": "5.8",
+                "unit": "%",
+                "reference_range": "< 5.7%",
+                "result_date": "unknown",
+            },
+            {
+                "test_name": "Serum Creatinine",
+                "value": "1.0",
+                "unit": "mg/dL",
+                "reference_range": "0.7-1.3 mg/dL",
+                "result_date": "",
+            },
+        ],
+        "allergies": [],
+        "findings": [],
+    }
+
+    mock_prov = MockAIProvider(canned_structured_response=raw_ai_output)
+    service = MedicalExtractionService(ai_provider=mock_prov)
+
+    record = service.extract_from_text("Lab panel results text")
+    assert isinstance(record, ExtractedMedicalRecord)
+    assert len(record.lab_results) == 3
+    assert record.lab_results[0].test_name == "Fasting Blood Glucose"
+    assert record.lab_results[0].value == "105"
+    assert record.lab_results[0].result_date is None
+    assert record.lab_results[1].test_name == "Hemoglobin A1c"
+    assert record.lab_results[1].result_date is None
+    assert record.lab_results[2].test_name == "Serum Creatinine"
+    assert record.lab_results[2].result_date is None
+
+    assert record.events[0].event_date is None
+    assert record.medications[0].start_date is None
+    assert record.medications[0].end_date is None
+

@@ -1,9 +1,98 @@
+import logging
 import uuid
 from datetime import date, datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
+
+_KNOWN_NON_DATE_STRINGS = {
+    "",
+    "none",
+    "null",
+    "unknown",
+    "n/a",
+    "na",
+    "undefined",
+    "nil",
+    "unspecified",
+    "not specified",
+    "missing",
+    "not available",
+    "invalid",
+    "x",
+    "xx",
+    "xxx",
+    "xxxx",
+}
+
+_ACCEPTED_DATE_FORMATS = (
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%m/%d/%Y",
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%B %d, %Y",
+    "%b %d, %Y",
+    "%d %B %Y",
+    "%d %b %Y",
+)
+
+
+def sanitize_extracted_date(v: Any) -> Optional[date]:
+    """
+    Defensively normalizes and validates AI-extracted clinical date fields.
+
+    Medical Safety Rules:
+    - Never guess, invent, or extrapolate missing date components.
+    - Full valid dates (e.g., '2026-08-15') are parsed into standard datetime.date objects.
+    - Ambiguous, placeholder (e.g., '200X-07-07', '20XX-??-??'), incomplete (e.g. '2024', '2024-07'),
+      empty (''), or text-marker ('unknown', 'null', 'N/A') dates are safely converted to None.
+    """
+    if v is None:
+        return None
+
+    if isinstance(v, datetime):
+        return v.date()
+
+    if isinstance(v, date):
+        return v
+
+    if not isinstance(v, str):
+        return None
+
+    raw_str = v.strip()
+    if not raw_str:
+        return None
+
+    if raw_str.lower() in _KNOWN_NON_DATE_STRINGS:
+        return None
+
+    # Check for placeholder wildcards, partial year masks, or template strings
+    if any(ch in raw_str for ch in ("x", "X", "?", "*", "_")) or "yyyy" in raw_str.lower():
+        return None
+
+    # Try ISO-8601 parsing first
+    try:
+        parsed_iso = date.fromisoformat(raw_str)
+        if 1900 <= parsed_iso.year <= 2100:
+            return parsed_iso
+    except (ValueError, TypeError):
+        pass
+
+    # Try standard explicit complete date formats
+    for fmt in _ACCEPTED_DATE_FORMATS:
+        try:
+            parsed = datetime.strptime(raw_str, fmt).date()
+            if 1900 <= parsed.year <= 2100:
+                return parsed
+        except (ValueError, TypeError):
+            continue
+
+    # Unrecognized, partial, or malformed date string -> return None (never guess)
+    return None
 
 
 class ExtractedMedicalEvent(BaseModel):
@@ -29,6 +118,11 @@ class ExtractedMedicalEvent(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("event_date", mode="before")
+    @classmethod
+    def validate_event_date(cls, v: Any) -> Optional[date]:
+        return sanitize_extracted_date(v)
 
 
 class ExtractedMedication(BaseModel):
@@ -67,6 +161,11 @@ class ExtractedMedication(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def validate_medication_dates(cls, v: Any) -> Optional[date]:
+        return sanitize_extracted_date(v)
+
     @model_validator(mode="after")
     def populate_normalized_name(self) -> "ExtractedMedication":
         if not self.normalized_name and self.name:
@@ -103,6 +202,11 @@ class ExtractedLabResult(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("result_date", mode="before")
+    @classmethod
+    def validate_result_date(cls, v: Any) -> Optional[date]:
+        return sanitize_extracted_date(v)
 
 
 class ExtractedAllergy(BaseModel):

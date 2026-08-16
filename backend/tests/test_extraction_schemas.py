@@ -145,3 +145,85 @@ def test_extracted_medical_record_invalid_confidence():
         ExtractedMedicalRecord(
             confidence_score=1.5,  # Must be <= 1.0
         )
+
+
+@pytest.mark.parametrize(
+    "input_date,expected_date",
+    [
+        ("2026-08-15", date(2026, 8, 15)),
+        ("2026/08/15", date(2026, 8, 15)),
+        ("08/15/2026", date(2026, 8, 15)),
+        (date(2026, 8, 15), date(2026, 8, 15)),
+    ],
+)
+def test_extracted_lab_result_valid_dates(input_date, expected_date):
+    lab = ExtractedLabResult(
+        test_name="Hemoglobin A1c",
+        value="5.6",
+        unit="%",
+        reference_range="4.0-5.6%",
+        result_date=input_date,
+    )
+    assert lab.test_name == "Hemoglobin A1c"
+    assert lab.value == "5.6"
+    assert lab.unit == "%"
+    assert lab.reference_range == "4.0-5.6%"
+    assert lab.result_date == expected_date
+
+
+@pytest.mark.parametrize(
+    "invalid_or_ambiguous_date",
+    [
+        None,
+        "",
+        "   ",
+        "\t\n",
+        "200X-07-07",
+        "20XX-01-01",
+        "2024-XX-XX",
+        "2024-??-??",
+        "202X",
+        "unknown",
+        "UNKNOWN",
+        "null",
+        "none",
+        "N/A",
+        "na",
+        "undefined",
+        "missing",
+        "2024",
+        "2024-07",
+        "July 2024",
+        "invalid_date",
+    ],
+)
+def test_extracted_lab_result_invalid_and_ambiguous_dates_become_none(invalid_or_ambiguous_date):
+    lab = ExtractedLabResult(
+        test_name="Serum Creatinine",
+        value="0.9",
+        unit="mg/dL",
+        reference_range="0.6-1.2 mg/dL",
+        result_date=invalid_or_ambiguous_date,
+    )
+    assert lab.test_name == "Serum Creatinine"
+    assert lab.value == "0.9"
+    assert lab.unit == "mg/dL"
+    assert lab.reference_range == "0.6-1.2 mg/dL"
+    assert lab.result_date is None
+
+
+def test_extracted_event_and_medication_date_sanitization():
+    event = ExtractedMedicalEvent(
+        title="Follow-up consultation",
+        event_date="200X-07-07",
+    )
+    assert event.event_date is None
+
+    med = ExtractedMedication(
+        name="Metformin 500mg",
+        start_date="200X-01-01",
+        end_date="unknown",
+    )
+    assert med.start_date is None
+    assert med.end_date is None
+

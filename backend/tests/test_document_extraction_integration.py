@@ -223,3 +223,48 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
         self.db.refresh(unprocessed_doc)
         assert unprocessed_doc.processing_status == "COMPLETED"
         assert unprocessed_doc.extracted_text is not None
+
+    def test_extract_document_with_malformed_lab_date_persists_as_null(self):
+        # Configure mock AI provider to return a lab result with malformed date "200X-07-07"
+        self.mock_ai.canned_structured_response = {
+            "document_type_detected": "lab_report",
+            "summary": "Laboratory metabolic panel.",
+            "confidence_score": 0.95,
+            "events": [],
+            "medications": [],
+            "lab_results": [
+                {
+                    "test_name": "Hemoglobin A1c",
+                    "value": "6.5",
+                    "unit": "%",
+                    "reference_range": "< 5.7%",
+                    "result_date": "200X-07-07",
+                }
+            ],
+            "allergies": [],
+            "findings": [],
+        }
+
+        response = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
+        assert response.status_code == 200, f"Expected 200 OK but got {response.status_code}: {response.text}"
+
+        data = response.json()
+        assert data["document_id"] == str(self.doc_a.id)
+        assert data["patient_id"] == str(self.patient_a.id)
+        assert data["status"] == "COMPLETED"
+        assert len(data["extracted_record"]["lab_results"]) == 1
+        assert data["extracted_record"]["lab_results"][0]["test_name"] == "Hemoglobin A1c"
+        assert data["extracted_record"]["lab_results"][0]["value"] == "6.5"
+        assert data["extracted_record"]["lab_results"][0]["unit"] == "%"
+        assert data["extracted_record"]["lab_results"][0]["result_date"] is None
+        assert data["persisted_counts"]["lab_results"] == 1
+
+        # Verify DB persistence
+        db_labs = self.db.query(LabResult).filter(LabResult.patient_id == self.patient_a.id).all()
+        assert len(db_labs) == 1
+        assert db_labs[0].test_name == "Hemoglobin A1c"
+        assert db_labs[0].value == "6.5"
+        assert db_labs[0].unit == "%"
+        assert db_labs[0].result_date is None
+        assert db_labs[0].document_id == self.doc_a.id
+
