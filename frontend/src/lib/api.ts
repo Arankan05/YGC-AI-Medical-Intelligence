@@ -15,7 +15,12 @@ import type {
   DocumentStatus,
   DocumentType,
   Finding,
+  LabIntelligenceOverview,
   LabResult,
+  LabStatus,
+  LabTrend,
+  LabTrendDirection,
+  LabTrendPoint,
   MedicalDocument,
   MedicalOverview,
   Medication,
@@ -85,6 +90,14 @@ export interface MediGuardianApi {
   listCrossCheckIssues(): Promise<CrossCheckIssue[]>;
   runMedicationSafetyCheck(): Promise<MedicationSafetyReport>;
   listLabResults(): Promise<LabResult[]>;
+  /** GET /api/lab-intelligence/overview — analysed results + available tests. */
+  getLabIntelligenceOverview(): Promise<LabIntelligenceOverview>;
+  /** GET /api/lab-intelligence/trends — one trend per test. */
+  listLabTrends(): Promise<LabTrend[]>;
+  /** GET /api/lab-intelligence/trends/{test_name}; null when the test is absent. */
+  getLabTrend(testName: string): Promise<LabTrend | null>;
+  /** Overview and trends folded into one row per test for the lab table. */
+  listLabIntelligence(): Promise<LabResult[]>;
   listFindings(): Promise<Finding[]>;
   listAllergies(): Promise<AllergyRecord[]>;
   listAnalyses(): Promise<AIAnalysisRecord[]>;
@@ -454,30 +467,185 @@ interface BackendLabResultResponse {
   created_at: string;
 }
 
+/**
+ * Read a laboratory value only when it is unambiguously one exact number.
+ *
+ * Mirrors LabIntelligenceService._parse_numeric_value. `parseFloat` is not safe
+ * here: it reads "1,200" as 1 and ">1000" as NaN inconsistently, and a censored
+ * "<0.01" is a detection limit, not the measurement 0.01.
+ */
+function parseExactNumber(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (/[<>≤≥~±,]/.test(text)) return null;
+  const match = /^([-+]?(?:\d+(?:\.\d+)?|\.\d+))(?:\s*[A-Za-z%/^([].*)?$/.exec(text);
+  if (!match) return null;
+  if (/^[-+]?(?:\d+(?:\.\d+)?|\.\d+)[eE][-+]?\d+$/.test(text)) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Maps a plain record from /api/records/lab-results.
+ *
+ * That endpoint stores values but does not classify them, so status is UNKNOWN
+ * and trend is INSUFFICIENT_DATA — the honest description of what it knows.
+ * Intelligence comes from /api/lab-intelligence, mapped below.
+ */
 function mapLabResult(item: BackendLabResultResponse): LabResult {
-  const numVal = parseFloat(item.value);
-  const validNum = !isNaN(numVal);
+  const numeric = parseExactNumber(item.value);
+  const date = formatDate(item.result_date || item.created_at);
   return {
     id: String(item.id),
     name: item.test_name || "Diagnostic Test",
     unit: item.unit || "",
     referenceRange: item.reference_range || "—",
-    latestValue: validNum ? numVal : 0,
+    latestValue: numeric,
     latestValueLabel: item.value || "—",
-    latestDate: formatDate(item.result_date || item.created_at),
+    latestDate: date,
     sourceDocument: item.source_document_name || "Lab Report",
-    trend: "stable",
-    severity: "ok",
-    statusLabel: "Recorded",
-    trendLabel: "Result",
+    sourceDocumentId: item.source_document_id ? String(item.source_document_id) : null,
+    trend: "INSUFFICIENT_DATA",
+    status: "UNKNOWN",
     points: [
       {
-        date: formatDate(item.result_date || item.created_at),
-        value: validNum ? numVal : 0,
-        documentId: String(item.source_document_id || ""),
+        date,
+        value: numeric,
+        valueLabel: item.value || "—",
+        status: "UNKNOWN",
+        documentId: item.source_document_id ? String(item.source_document_id) : null,
+        documentName: item.source_document_name || null,
       },
     ],
   };
+}
+
+// ----------------------------------------------------------------------
+// Lab intelligence
+// ----------------------------------------------------------------------
+
+interface BackendLabAnalysisResponse {
+  id: string;
+  test_name: string;
+  value: string;
+  numeric_value?: number | null;
+  unit?: string | null;
+  reference_range?: string | null;
+  result_date?: string | null;
+  status: LabStatus;
+  source_document_id?: string | null;
+  source_document_name?: string | null;
+}
+
+interface BackendLabTrendPointResponse {
+  result_date?: string | null;
+  value: string;
+  numeric_value?: number | null;
+  unit?: string | null;
+  status: LabStatus;
+  source_document_id?: string | null;
+  source_document_name?: string | null;
+}
+
+interface BackendLabTrendResponse {
+  test_name: string;
+  unit?: string | null;
+  trend: LabTrendDirection;
+  points: BackendLabTrendPointResponse[];
+}
+
+interface BackendLabOverviewResponse {
+  results: BackendLabAnalysisResponse[];
+  available_tests: string[];
+}
+
+/**
+ * Backend states are passed through verbatim. Anything unrecognised degrades to
+ * UNKNOWN / INSUFFICIENT_DATA rather than to a confident value.
+ */
+function toLabStatus(value: unknown): LabStatus {
+  return value === "NORMAL" || value === "HIGH" || value === "LOW"
+    ? value
+    : "UNKNOWN";
+}
+
+function toLabTrend(value: unknown): LabTrendDirection {
+  return value === "INCREASING" || value === "DECREASING" || value === "STABLE"
+    ? value
+    : "INSUFFICIENT_DATA";
+}
+
+function mapLabTrendPoint(point: BackendLabTrendPointResponse): LabTrendPoint {
+  return {
+    date: formatDate(point.result_date),
+    value: point.numeric_value ?? null,
+    valueLabel: point.value || "—",
+    status: toLabStatus(point.status),
+    documentId: point.source_document_id ? String(point.source_document_id) : null,
+    documentName: point.source_document_name || null,
+  };
+}
+
+function mapLabTrend(trend: BackendLabTrendResponse): LabTrend {
+  return {
+    testName: trend.test_name,
+    unit: trend.unit || null,
+    trend: toLabTrend(trend.trend),
+    points: (trend.points || []).map(mapLabTrendPoint),
+  };
+}
+
+function mapLabOverview(data: BackendLabOverviewResponse): LabIntelligenceOverview {
+  return {
+    results: (data?.results || []).map((item) => ({
+      id: String(item.id),
+      name: item.test_name || "Diagnostic Test",
+      unit: item.unit || "",
+      referenceRange: item.reference_range || "—",
+      latestValue: item.numeric_value ?? null,
+      latestValueLabel: item.value || "—",
+      latestDate: formatDate(item.result_date),
+      sourceDocument: item.source_document_name || "",
+      sourceDocumentId: item.source_document_id ? String(item.source_document_id) : null,
+      status: toLabStatus(item.status),
+      trend: "INSUFFICIENT_DATA",
+      points: [],
+    })),
+    availableTests: data?.available_tests || [],
+  };
+}
+
+/**
+ * Folds the per-test trends into the per-test rows the lab results table shows.
+ *
+ * The overview is per result; the table is per test. The newest analysed result
+ * for a test supplies value/status, its trend supplies direction and history.
+ */
+function mergeLabIntelligence(
+  overview: LabIntelligenceOverview,
+  trends: LabTrend[]
+): LabResult[] {
+  const trendByTest = new Map(trends.map((t) => [t.testName.trim().toLowerCase(), t]));
+  const seen = new Set<string>();
+  const rows: LabResult[] = [];
+
+  // overview.results arrive newest first, so the first row per test is latest.
+  for (const result of overview.results) {
+    const key = result.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const trend = trendByTest.get(key);
+    rows.push({
+      ...result,
+      trend: trend ? trend.trend : "INSUFFICIENT_DATA",
+      unit: result.unit || trend?.unit || "",
+      points: trend ? trend.points : [],
+    });
+  }
+
+  return rows;
 }
 
 interface BackendMedicalEventResponse {
@@ -936,6 +1104,61 @@ const defaultApiImplementation: MediGuardianApi = {
     }
     const data = await res.json();
     return (data || []).map(mapLabResult);
+  },
+
+  async getLabIntelligenceOverview(): Promise<LabIntelligenceOverview> {
+    const res = await authFetch("/api/lab-intelligence/overview", {
+      method: "GET",
+    });
+    if (res.status === 401) return { results: [], availableTests: [] };
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch lab intelligence." }));
+      throw new Error(err.detail || "Failed to fetch lab intelligence.");
+    }
+    return mapLabOverview(await res.json());
+  },
+
+  async listLabTrends(): Promise<LabTrend[]> {
+    const res = await authFetch("/api/lab-intelligence/trends", {
+      method: "GET",
+    });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch lab trends." }));
+      throw new Error(err.detail || "Failed to fetch lab trends.");
+    }
+    const data = await res.json();
+    return (data?.trends || []).map(mapLabTrend);
+  },
+
+  async getLabTrend(testName: string): Promise<LabTrend | null> {
+    const res = await authFetch(
+      `/api/lab-intelligence/trends/${encodeURIComponent(testName)}`,
+      { method: "GET" }
+    );
+    if (res.status === 401) return null;
+    // 404 means this patient has no result under that name — an expected
+    // outcome, not a failure.
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch lab trend." }));
+      throw new Error(err.detail || "Failed to fetch lab trend.");
+    }
+    return mapLabTrend(await res.json());
+  },
+
+  async listLabIntelligence(): Promise<LabResult[]> {
+    const [overview, trends] = await Promise.all([
+      defaultApiImplementation.getLabIntelligenceOverview(),
+      defaultApiImplementation.listLabTrends(),
+    ]);
+    return mergeLabIntelligence(overview, trends);
   },
 
   async listFindings(): Promise<Finding[]> {

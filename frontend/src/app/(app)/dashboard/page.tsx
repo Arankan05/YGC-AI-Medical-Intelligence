@@ -15,6 +15,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Panel, PanelHeader } from "@/components/panel";
 import { RiskBadge } from "@/components/risk-badge";
 import { api } from "@/lib/api";
+import { LAB_STATUS_LABELS, LAB_TREND_LABELS } from "@/lib/lab-display";
 import type {
   AllergyRecord,
   DashboardMetric,
@@ -45,7 +46,7 @@ export default function DashboardPage() {
       api().listMedications().catch(() => []),
       api().listTimeline().catch(() => []),
       api().listAllergies().catch(() => []),
-      api().listLabResults().catch(() => []),
+      api().listLabIntelligence().catch(() => []),
     ])
       .then(([ov, docs, fnds, meds, tm, al, lb]) => {
         if (active) {
@@ -286,13 +287,19 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-base font-bold text-neutral-900">
-                            {lab.latestValueLabel || lab.latestValue}
+                            {/* Exactly what the lab reported — a censored
+                                "<0.01" stays as written, never becomes 0. */}
+                            {lab.latestValueLabel}
                           </span>
                           <span className="text-xs text-neutral-500">{lab.unit}</span>
                         </div>
                         {lab.referenceRange && (
                           <span className="text-[11px] text-neutral-500">Ref: {lab.referenceRange}</span>
                         )}
+                        <span className="text-[11px] text-neutral-500">
+                          {LAB_STATUS_LABELS[lab.status]} ·{" "}
+                          {LAB_TREND_LABELS[lab.trend]}
+                        </span>
                       </div>
                     ))}
                   </div>
