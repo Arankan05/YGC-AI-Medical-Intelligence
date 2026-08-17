@@ -9,10 +9,18 @@ export const metadata: Metadata = {
   title: "Recommended healthcare providers — MediGuardian AI",
 };
 
+function firstValue(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const trimmed = (raw ?? "").trim();
+  return trimmed || undefined;
+}
+
 /**
- * Figma: 15 · Provider Results (35:1112), plus its two states —
- * 16 · No Providers Found (37:1200) at `?state=empty` and
- * 17 · Provider Service Unavailable (37:1635) at `?state=unavailable`.
+ * Figma: 15 · Provider Results (35:1112).
+ *
+ * The results themselves are fetched in the client view, so no count can be
+ * stated here — the subtitle describes the search that is running, not an
+ * outcome that has not happened yet.
  */
 export default async function ProviderResultsPage({
   searchParams,
@@ -20,30 +28,49 @@ export default async function ProviderResultsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const state =
-    params.state === "empty" || params.state === "unavailable"
-      ? params.state
-      : "results";
-  const location =
-    typeof params.location === "string" && params.location.trim()
-      ? params.location.trim()
-      : "Jaffna";
-  const radiusKm = Number(params.radius) || 10;
 
-  const subtitle =
-    state === "unavailable"
-      ? "Provider lookup failed — your records are unaffected"
-      : state === "empty"
-        ? `No providers found within ${radiusKm} km of ${location}`
-        : `4 real providers found within ${radiusKm} km of ${location}`;
+  const location = firstValue(params.location);
+  const radiusKm = Number(firstValue(params.radius)) || 10;
+  const availability = firstValue(params.availability);
+  const specialty = firstValue(params.specialty);
+  const findingId = firstValue(params.findingId);
+
+  if (!location) {
+    return (
+      <AppShell
+        title="Recommended healthcare providers"
+        subtitle="No location was provided"
+      >
+        <div className="flex min-h-full w-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+          <h2 className="text-[22px] leading-[30px] font-semibold tracking-[-0.3px] text-neutral-900">
+            Tell us where to search
+          </h2>
+          <p className="max-w-md text-sm leading-[21px] text-neutral-600">
+            Start from the provider search so we know which area to look in.
+          </p>
+          <a
+            href="/providers"
+            className="rounded-[9px] bg-brand-700 px-[18px] py-[11px] text-sm font-medium text-neutral-0 transition-colors hover:bg-brand-800"
+          >
+            Go to provider search
+          </a>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
-    <AppShell title="Recommended healthcare providers" subtitle={subtitle}>
+    <AppShell
+      title="Recommended healthcare providers"
+      subtitle={`Searching within ${radiusKm} km of ${location}`}
+    >
       <Suspense fallback={null}>
         <ProviderResultsView
-          state={state}
           location={location}
           radiusKm={radiusKm}
+          availability={availability}
+          specialty={specialty}
+          findingId={findingId}
         />
       </Suspense>
     </AppShell>

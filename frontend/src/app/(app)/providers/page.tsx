@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { AppShell } from "@/components/app-shell";
 
@@ -15,7 +16,11 @@ export default function ProvidersPage() {
       title="Find a healthcare provider"
       subtitle="Triggered by a high-risk finding in your records"
     >
-      <ProviderSearchForm />
+      {/* The form reads `findingId` from the query string, and useSearchParams
+          must sit inside a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <ProviderSearchForm />
+      </Suspense>
     </AppShell>
   );
 }

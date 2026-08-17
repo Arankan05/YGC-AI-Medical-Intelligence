@@ -244,7 +244,11 @@ export function FindingDetailView({ finding }: { finding: Finding }) {
                 </p>
               </div>
               <Button
-                render={<Link href="/providers" />}
+                render={
+                  // Carrying the finding through lets the search derive a
+                  // specialty from it and record what prompted the search.
+                  <Link href={`/providers?findingId=${encodeURIComponent(finding.id)}`} />
+                }
                 className="w-full gap-[9px] py-3"
               >
                 <MapPin className="size-4" strokeWidth={1.8} />

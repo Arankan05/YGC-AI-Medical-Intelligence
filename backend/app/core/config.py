@@ -80,6 +80,15 @@ class Settings(BaseSettings):
         default="https://overpass-api.de/api/interpreter",
         description="Overpass API endpoint for healthcare provider discovery",
     )
+    PROVIDER_DIRECTORY_CONTACT: Optional[str] = Field(
+        default=None,
+        description=(
+            "Real contact URL or mailto: advertised in the User-Agent sent to Nominatim and "
+            "Overpass, as their usage policies request. Left unset the requests still identify "
+            "this application, but offer no way to reach its operators before being blocked; "
+            "set it to a genuine address before using the public instances."
+        ),
+    )
 
     # OCR Settings
     TESSERACT_CMD: Optional[str] = Field(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Check, Info, MapPin, Search, Stethoscope, TriangleAlert } from "lucide-react";
 
@@ -18,6 +18,12 @@ import { cn } from "@/lib/utils";
 
 export function ProviderSearchForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Carried through from a finding's "Find healthcare providers nearby" action,
+  // so the search can derive a specialty and record what prompted it.
+  const findingId = searchParams.get("findingId") ?? "";
+
   const [location, setLocation] = useState(providerSearchDefaults.location);
   const [availability, setAvailability] = useState(
     providerSearchDefaults.availability
@@ -37,6 +43,7 @@ export function ProviderSearchForm() {
       radius: String(radiusKm),
       availability,
     });
+    if (findingId) params.set("findingId", findingId);
     router.push(`/providers/results?${params.toString()}`);
   }
 
@@ -54,7 +61,10 @@ export function ProviderSearchForm() {
           <div className="flex flex-col gap-[18px] px-5 pt-4 pb-[18px]">
             <div className="flex w-full flex-col gap-[9px]">
               <p className="text-xs leading-4 font-semibold text-neutral-700">
-                SUITABLE PROFESSIONAL — MATCHED FROM THE FINDING
+                {/* Only claim a match when a finding was actually carried in. */}
+                {findingId
+                  ? "SUITABLE PROFESSIONAL — MATCHED FROM THE FINDING"
+                  : "SUITABLE PROFESSIONAL — GENERAL SEARCH"}
               </p>
               <div className="flex w-full flex-wrap items-center gap-[13px] rounded-[10px] border border-brand-200 bg-brand-50 px-4 py-3.5">
                 <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-brand-700">
@@ -245,8 +255,8 @@ export function ProviderSearchForm() {
           <ProviderAttribution className="flex-1" />
           <p className="flex items-start gap-2 text-xs leading-4 text-neutral-500">
             <Info className="size-3.5 shrink-0" strokeWidth={1.8} />
-            Provider results come from the live OpenStreetMap services once the
-            backend is connected.
+            Provider results come from the live OpenStreetMap Nominatim and
+            Overpass services at the moment you search.
           </p>
         </aside>
       </form>

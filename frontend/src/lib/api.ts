@@ -27,7 +27,10 @@ import type {
   MedicationFlagKind,
   MedicationSafetyReport,
   Provider,
+  ProviderKind,
+  ProviderSearchHistoryEntry,
   ProviderSearchParams,
+  ProviderSearchResult,
   RiskLevel,
   TimelineEvent,
   TimelineEventKind,
@@ -38,6 +41,32 @@ export class ApiNotConfiguredError extends Error {
   constructor(operation: string) {
     super(`"${operation}" is not connected to a backend yet.`);
     this.name = "ApiNotConfiguredError";
+  }
+}
+
+/**
+ * The place name could not be resolved.
+ *
+ * A correct negative answer from the geocoder, not an outage — the remedy is a
+ * different search term, not a retry.
+ */
+export class LocationNotFoundError extends Error {
+  constructor(location: string) {
+    super(`We could not find "${location}".`);
+    this.name = "LocationNotFoundError";
+  }
+}
+
+/**
+ * An upstream directory service could not be reached.
+ *
+ * This means "we do not know", never "there is nothing there". It must never be
+ * presented to a patient as an empty set of providers.
+ */
+export class ProviderDirectoryUnavailableError extends Error {
+  constructor(message?: string) {
+    super(message || "The healthcare directory is temporarily unavailable.");
+    this.name = "ProviderDirectoryUnavailableError";
   }
 }
 
@@ -106,7 +135,19 @@ export interface MediGuardianApi {
 
   askAi(input: AskAiInput): Promise<ChatMessage>;
 
-  searchProviders(params: ProviderSearchParams): Promise<Provider[]>;
+  /**
+   * POST /api/doctor-search/search — resolves the location, queries
+   * OpenStreetMap and records the search.
+   *
+   * Throws LocationNotFoundError when the place name is unknown and
+   * ProviderDirectoryUnavailableError when an upstream service is down. An
+   * empty `providers` array is a real answer: no facilities were found there.
+   */
+  searchProviders(params: ProviderSearchParams): Promise<ProviderSearchResult>;
+  /** GET /api/doctor-search/history — previous searches, most recent first. */
+  listProviderSearches(limit?: number): Promise<ProviderSearchHistoryEntry[]>;
+  /** GET /api/doctor-search/searches/{id}; null when it is not this patient's. */
+  getProviderSearch(searchId: string): Promise<ProviderSearchResult | null>;
 
   getProfile(): Promise<UserProfile>;
   updateProfile(profile: Partial<UserProfile>): Promise<UserProfile>;
@@ -646,6 +687,161 @@ function mergeLabIntelligence(
   }
 
   return rows;
+}
+
+// ----------------------------------------------------------------------
+// Healthcare providers
+// ----------------------------------------------------------------------
+
+interface BackendMatchBreakdownResponse {
+  specialty: number;
+  distance: number;
+  completeness: number;
+  verified: number;
+}
+
+interface BackendProviderResponse {
+  id: string;
+  provider_name: string;
+  kind: string;
+  specialties?: string[] | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_km?: number | null;
+  phone?: string | null;
+  website?: string | null;
+  opening_hours?: string | null;
+  source: string;
+  match_score: number;
+  match_breakdown: BackendMatchBreakdownResponse;
+  created_at: string;
+}
+
+interface BackendDoctorSearchSummaryResponse {
+  id: string;
+  specialty: string;
+  location_query: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  availability_preference?: string | null;
+  search_radius?: number | null;
+  finding_id?: string | null;
+  result_count?: number;
+  created_at: string;
+}
+
+interface BackendDoctorSearchResponse {
+  search: BackendDoctorSearchSummaryResponse;
+  recommendations?: BackendProviderResponse[] | null;
+}
+
+const PROVIDER_KINDS: ProviderKind[] = [
+  "hospital",
+  "clinic",
+  "doctor",
+  "pharmacy",
+  "laboratory",
+];
+
+/**
+ * Backend categories are passed through verbatim. An unrecognised one degrades
+ * to "" so the row still renders, rather than being relabelled as some other
+ * kind of facility.
+ */
+function toProviderKind(value: unknown): ProviderKind | "" {
+  return (PROVIDER_KINDS as string[]).includes(String(value))
+    ? (value as ProviderKind)
+    : "";
+}
+
+/**
+ * Splits the stored scope, e.g. "hospital" or "doctor:cardiology".
+ *
+ * Mirrors ProviderDiscoveryService.parse_search_scope. An unreadable scope
+ * yields no kind rather than a guess.
+ */
+function parseScope(scope: string | null | undefined): {
+  kind: ProviderKind | "";
+  specialty: string | null;
+} {
+  const text = (scope || "").trim().toLowerCase();
+  if (!text) return { kind: "", specialty: null };
+  const separator = text.indexOf(":");
+  const kind = toProviderKind(separator >= 0 ? text.slice(0, separator) : text);
+  const specialty = separator >= 0 ? text.slice(separator + 1).trim() : "";
+  return { kind, specialty: kind && specialty ? specialty : null };
+}
+
+/** Null stays null: a detail the source did not publish is not filled in. */
+function optionalText(value: string | null | undefined): string | null {
+  const text = (value || "").trim();
+  return text || null;
+}
+
+function mapProvider(item: BackendProviderResponse): Provider {
+  const hasCoordinates =
+    typeof item.latitude === "number" && typeof item.longitude === "number";
+  const breakdown = item.match_breakdown;
+
+  return {
+    id: String(item.id),
+    name: item.provider_name,
+    kind: toProviderKind(item.kind),
+    specialties: item.specialties || [],
+    address: optionalText(item.address),
+    distanceKm: typeof item.distance_km === "number" ? item.distance_km : null,
+    openingHours: optionalText(item.opening_hours),
+    phone: optionalText(item.phone),
+    website: optionalText(item.website),
+    matchScore: Math.round(item.match_score ?? 0),
+    matchBreakdown: [
+      breakdown?.specialty ?? 0,
+      breakdown?.distance ?? 0,
+      breakdown?.completeness ?? 0,
+      breakdown?.verified ?? 0,
+    ],
+    coordinates: hasCoordinates
+      ? { lat: item.latitude as number, lng: item.longitude as number }
+      : null,
+  };
+}
+
+function mapProviderSearch(
+  data: BackendDoctorSearchResponse
+): ProviderSearchResult {
+  const search = data.search;
+  const scope = parseScope(search.specialty);
+  const hasOrigin =
+    typeof search.latitude === "number" && typeof search.longitude === "number";
+
+  return {
+    searchId: String(search.id),
+    locationQuery: search.location_query,
+    origin: hasOrigin
+      ? { lat: search.latitude as number, lng: search.longitude as number }
+      : null,
+    radiusKm: typeof search.search_radius === "number" ? search.search_radius : null,
+    availability: optionalText(search.availability_preference),
+    scope: search.specialty,
+    scopeKind: scope.kind,
+    scopeSpecialty: scope.specialty,
+    providers: (data.recommendations || []).map(mapProvider),
+  };
+}
+
+function mapProviderHistoryEntry(
+  item: BackendDoctorSearchSummaryResponse
+): ProviderSearchHistoryEntry {
+  return {
+    searchId: String(item.id),
+    locationQuery: item.location_query,
+    scope: item.specialty,
+    radiusKm: typeof item.search_radius === "number" ? item.search_radius : null,
+    availability: optionalText(item.availability_preference),
+    resultCount: item.result_count ?? 0,
+    searchedOn: formatDate(item.created_at),
+  };
 }
 
 interface BackendMedicalEventResponse {
@@ -1215,8 +1411,92 @@ const defaultApiImplementation: MediGuardianApi = {
   },
 
   askAi: (input: AskAiInput) => unconfigured("askAi")(input),
-  searchProviders: (params: ProviderSearchParams) =>
-    unconfigured("searchProviders")(params),
+
+  async searchProviders(
+    params: ProviderSearchParams
+  ): Promise<ProviderSearchResult> {
+    const body: Record<string, unknown> = {
+      location: params.location,
+      radius_km: params.radiusKm,
+    };
+    if (params.specialty) body.specialty = params.specialty;
+    if (params.findingId) body.finding_id = params.findingId;
+    if (params.availability) body.availability = params.availability;
+    if (params.kinds && params.kinds.length) body.kinds = params.kinds;
+
+    const res = await authFetch("/api/doctor-search/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    // A place name the geocoder does not recognise, or a finding that is not
+    // this patient's. Both are answers, not outages.
+    if (res.status === 404) {
+      throw new LocationNotFoundError(params.location);
+    }
+    // The upstream directory is down. This must stay distinct from an empty
+    // result: telling a patient there are no providers near them when we simply
+    // could not look would be a false statement about their area.
+    if (res.status === 503) {
+      const err = await res.json().catch(() => ({ detail: "" }));
+      throw new ProviderDirectoryUnavailableError(err.detail || undefined);
+    }
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to search for healthcare providers." }));
+      throw new Error(
+        typeof err.detail === "string"
+          ? err.detail
+          : "Failed to search for healthcare providers."
+      );
+    }
+
+    return mapProviderSearch(await res.json());
+  },
+
+  async listProviderSearches(
+    limit = 20
+  ): Promise<ProviderSearchHistoryEntry[]> {
+    const res = await authFetch(
+      `/api/doctor-search/history?limit=${encodeURIComponent(String(limit))}`,
+      { method: "GET" }
+    );
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch provider search history." }));
+      throw new Error(err.detail || "Failed to fetch provider search history.");
+    }
+    const data = await res.json();
+    return (data?.searches || []).map(mapProviderHistoryEntry);
+  },
+
+  async getProviderSearch(
+    searchId: string
+  ): Promise<ProviderSearchResult | null> {
+    const res = await authFetch(
+      `/api/doctor-search/searches/${encodeURIComponent(searchId)}`,
+      { method: "GET" }
+    );
+    if (res.status === 401) return null;
+    // 404 means this patient has no such search — an expected outcome, not a
+    // failure, and deliberately indistinguishable from another patient's id.
+    if (res.status === 404) return null;
+    if (res.status === 503) {
+      const err = await res.json().catch(() => ({ detail: "" }));
+      throw new ProviderDirectoryUnavailableError(err.detail || undefined);
+    }
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to fetch the provider search." }));
+      throw new Error(err.detail || "Failed to fetch the provider search.");
+    }
+    return mapProviderSearch(await res.json());
+  },
 
   async getProfile(): Promise<UserProfile> {
     const token = await getAccessToken();

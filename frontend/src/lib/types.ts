@@ -344,30 +344,71 @@ export type ProviderKind =
   | "pharmacy"
   | "laboratory";
 
+/**
+ * One healthcare provider returned by the backend.
+ *
+ * Every nullable field is null when OpenStreetMap published nothing for it.
+ * Null means "not published" and is rendered as "Not available" — it is never
+ * substituted with a plausible-looking value.
+ */
 export interface Provider {
   id: string;
   name: string;
-  kind: ProviderKind;
+  /** Empty string only if a stored record carries a scope this build cannot read. */
+  kind: ProviderKind | "";
+  /** Empty when the source published no specialty; never inferred from `kind`. */
   specialties: string[];
-  address: string;
-  distanceKm: number;
-  openingHours?: string;
-  phone?: string;
-  website?: string;
+  address: string | null;
+  /** Straight-line distance; null when either side lacks coordinates. */
+  distanceKm: number | null;
+  /** Published opening hours, verbatim. Never an appointment time. */
+  openingHours: string | null;
+  phone: string | null;
+  website: string | null;
+  /** 0–100, recomputed by the backend on every read rather than stored. */
   matchScore: number;
-  /** Ranking weights in the "Why ranked here" bar: specialty, distance, completeness, other. */
+  /** The four parts of matchScore: specialty, distance, completeness, verified. */
   matchBreakdown: [number, number, number, number];
-  coordinates: { lat: number; lng: number };
-  /** Position of the marker on the map panel, in percent of the map box. */
-  mapPosition: { top: number; left: number };
+  /** Null when the source published no location for this facility. */
+  coordinates: { lat: number; lng: number } | null;
 }
 
+/** Mirrors the backend ProviderSearchRequest. */
 export interface ProviderSearchParams {
   location: string;
   radiusKm: number;
-  specialty: string;
-  kinds: ProviderKind[];
-  openNow: boolean;
+  specialty?: string;
+  findingId?: string;
+  availability?: string;
+  kinds?: ProviderKind[];
+}
+
+/** One recorded search and its ranked results. */
+export interface ProviderSearchResult {
+  searchId: string;
+  /** The place name as typed, saved to the patient's provider-search history. */
+  locationQuery: string;
+  /** Where the place name resolved to; null when the source omitted it. */
+  origin: { lat: number; lng: number } | null;
+  radiusKm: number | null;
+  availability: string | null;
+  /** Stored scope, e.g. "hospital" or "doctor:cardiology". */
+  scope: string;
+  /** `scope` split into its parts. */
+  scopeKind: ProviderKind | "";
+  scopeSpecialty: string | null;
+  providers: Provider[];
+}
+
+/** A previous search, without its results. */
+export interface ProviderSearchHistoryEntry {
+  searchId: string;
+  locationQuery: string;
+  scope: string;
+  radiusKm: number | null;
+  availability: string | null;
+  resultCount: number;
+  searchedOn: string;
 }
 
 export interface DashboardMetric {

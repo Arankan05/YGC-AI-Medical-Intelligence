@@ -8,21 +8,85 @@ import type { Provider } from "@/lib/types";
  *
  * The panel renders the map surface, the search-radius ring, the "you are here"
  * dot and one numbered marker per ranked provider, plus the OpenStreetMap
- * attribution bar. Tiles themselves come from a Leaflet layer once the provider
- * service is connected — mount it inside the marked container below; the marker
- * layer already reads `provider.coordinates`.
+ * attribution bar. Tiles themselves come from a Leaflet layer — mount it inside
+ * the marked container below; the marker layer reads `provider.coordinates`.
+ *
+ * Marker placement is derived here rather than stored: the backend returns
+ * latitude and longitude, and where that falls on this panel is purely a
+ * presentation concern.
  */
+
+/** The dashed radius ring is `w-[62%]`, so its radius is 31% of the box. */
+const RING_RADIUS_PERCENT = 31;
+
+/** Rough kilometres per degree of latitude; good enough at city scale. */
+const KM_PER_DEGREE = 111.32;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Projects a provider onto the panel, in percent of the box.
+ *
+ * An equirectangular projection scaled so the search radius lands on the ring.
+ * The panel is not square, so a point at exactly the radius sits on the ring
+ * horizontally and near it vertically — this is a locator, not a survey map.
+ * Markers are clamped inside the panel so one just beyond the radius stays
+ * visible at the edge instead of being clipped away.
+ */
+function projectToPanel(
+  origin: { lat: number; lng: number },
+  point: { lat: number; lng: number },
+  radiusKm: number
+) {
+  const eastKm =
+    (point.lng - origin.lng) *
+    KM_PER_DEGREE *
+    Math.cos((origin.lat * Math.PI) / 180);
+  const northKm = (point.lat - origin.lat) * KM_PER_DEGREE;
+  const scale = RING_RADIUS_PERCENT / Math.max(radiusKm, 0.1);
+
+  return {
+    left: clamp(50 + eastKm * scale, 6, 94),
+    top: clamp(50 - northKm * scale, 8, 92),
+  };
+}
+
 export function ProviderMap({
   providers,
+  origin = null,
+  radiusKm = null,
   locationLabel,
   unavailable = false,
   className,
 }: {
   providers: Provider[];
+  /** Where the search location resolved to; markers cannot be placed without it. */
+  origin?: { lat: number; lng: number } | null;
+  radiusKm?: number | null;
   locationLabel: string;
   unavailable?: boolean;
   className?: string;
 }) {
+  // A provider the source gave no coordinates for cannot be placed. It stays in
+  // the ranked list and is simply absent from the map, rather than being
+  // dropped somewhere plausible.
+  const plotted =
+    origin && radiusKm
+      ? providers.flatMap((provider, index) =>
+          provider.coordinates
+            ? [
+                {
+                  provider,
+                  rank: index + 1,
+                  position: projectToPanel(origin, provider.coordinates, radiusKm),
+                },
+              ]
+            : []
+        )
+      : [];
+
   return (
     <section
       className={cn(
@@ -51,28 +115,29 @@ export function ProviderMap({
             {/* you are here */}
             <span className="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-neutral-0 bg-brand-700 shadow-card" />
 
-            {providers.map((provider, index) => (
+            {plotted.map(({ provider, rank, position }) => (
               <span
                 key={provider.id}
-                title={`${provider.name} · ${provider.distanceKm} km`}
-                style={{
-                  top: `${provider.mapPosition.top}%`,
-                  left: `${provider.mapPosition.left}%`,
-                }}
+                title={
+                  provider.distanceKm !== null
+                    ? `${provider.name} · ${provider.distanceKm.toFixed(1)} km`
+                    : provider.name
+                }
+                style={{ top: `${position.top}%`, left: `${position.left}%` }}
                 className="absolute flex -translate-x-1/2 -translate-y-full flex-col items-center"
               >
                 <span
                   className={cn(
                     "flex size-[26px] items-center justify-center rounded-full border-2 border-neutral-0 text-[11px] font-bold text-neutral-0 shadow-card",
-                    index === 0 ? "bg-brand-700" : "bg-sidebar-active-bg"
+                    rank === 1 ? "bg-brand-700" : "bg-sidebar-active-bg"
                   )}
                 >
-                  {index + 1}
+                  {rank}
                 </span>
                 <span
                   className={cn(
                     "-mt-1 size-2 rotate-45",
-                    index === 0 ? "bg-brand-700" : "bg-sidebar-active-bg"
+                    rank === 1 ? "bg-brand-700" : "bg-sidebar-active-bg"
                   )}
                 />
               </span>

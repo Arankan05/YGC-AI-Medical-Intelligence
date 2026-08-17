@@ -1,8 +1,11 @@
 /**
  * Application Constants and UI Metadata for MediGuardian AI.
  * 
- * Contains UI configuration, pipeline descriptions, security explanations,
- * OpenStreetMap provider data, and empty default arrays for real-user data flow.
+ * Contains UI configuration, pipeline descriptions, security explanations, and
+ * empty default arrays for real-user data flow.
+ *
+ * Provider records are never held here. Every healthcare provider shown comes
+ * from the backend, which sources it from OpenStreetMap at request time.
  */
 
 import type {
@@ -14,7 +17,6 @@ import type {
   MedicalDocument,
   Medication,
   PipelineStep,
-  Provider,
   TimelineEvent,
   UploadItem,
 } from "@/lib/types";
@@ -229,9 +231,11 @@ export const availabilityOptions = [
 export const radiusOptions = [5, 10, 25, 50];
 
 export const providerSearchDefaults = {
-  location: "Jaffna",
+  // Left blank on purpose: prefilling a place would search somewhere the
+  // patient never chose.
+  location: "",
   geocodeNote:
-    "Resolved via Nominatim. Your location is used for this search only and is not stored alongside your medical records.",
+    "Resolved via Nominatim. The place you search for is saved to your provider-search history, which is stored separately from your medical records.",
   availability: "evenings",
   radiusKm: 10,
   availabilityNote:
@@ -242,65 +246,6 @@ export const providerSearchDefaults = {
       "Consult a qualified healthcare provider or clinic near you to review your medical health and records.",
   },
 };
-
-export const providers: Provider[] = [
-  {
-    id: "jaffna-teaching-hospital",
-    name: "Jaffna Teaching Hospital",
-    kind: "hospital",
-    specialties: ["General medicine · on-site pharmacy"],
-    address: "Hospital Road, Jaffna",
-    distanceKm: 2.1,
-    openingHours: "Open 24 hours",
-    phone: "+94 21 222 3348",
-    matchScore: 92,
-    matchBreakdown: [56, 38, 21, 18],
-    coordinates: { lat: 9.6698, lng: 80.0206 },
-    mapPosition: { top: 42, left: 46 },
-  },
-  {
-    id: "green-cross-pharmacy",
-    name: "Green Cross Pharmacy",
-    kind: "pharmacy",
-    specialties: ["Dispensing pharmacist"],
-    address: "Kasthuriyar Road, Jaffna",
-    distanceKm: 1.4,
-    openingHours: "Mon–Sat 08:00 – 21:00",
-    phone: "+94 21 222 7014",
-    matchScore: 88,
-    matchBreakdown: [50, 42, 18, 12],
-    coordinates: { lat: 9.6634, lng: 80.0136 },
-    mapPosition: { top: 50, left: 28 },
-  },
-  {
-    id: "nallur-medical-centre",
-    name: "Nallur Medical Centre",
-    kind: "clinic",
-    specialties: ["General practice · evening clinic"],
-    address: "Point Pedro Road, Nallur",
-    distanceKm: 3.2,
-    openingHours: "Daily 16:30 – 21:30",
-    phone: "+94 21 222 9110",
-    matchScore: 84,
-    matchBreakdown: [48, 34, 18, 12],
-    coordinates: { lat: 9.6781, lng: 80.0342 },
-    mapPosition: { top: 28, left: 68 },
-  },
-  {
-    id: "central-hospital-jaffna",
-    name: "Central Hospital Jaffna",
-    kind: "hospital",
-    specialties: ["Multi-specialty outpatient · diagnostics"],
-    address: "Main Street, Jaffna",
-    distanceKm: 1.8,
-    openingHours: "Open 24 hours",
-    phone: "+94 21 222 4500",
-    matchScore: 81,
-    matchBreakdown: [44, 38, 16, 11],
-    coordinates: { lat: 9.6647, lng: 80.0175 },
-    mapPosition: { top: 56, left: 38 },
-  },
-];
 
 export const providerResultsNote =
   "Ranking weights: Specialty relevance (40%) · Distance (30%) · Data completeness (15%) · Verified details (15%). OpenStreetMap data only.";
