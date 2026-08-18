@@ -87,8 +87,9 @@ class PyMuPDFExtractor:
             for page_index in range(page_count):
                 try:
                     page = doc[page_index]
-                    text = page.get_text("text") or ""
-                    page_texts.append(text.strip())
+                    raw_page_text = page.get_text("text") or ""
+                    text = raw_page_text.strip() if isinstance(raw_page_text, str) else str(raw_page_text).strip()
+                    page_texts.append(text)
                 except Exception as page_err:
                     logger.warning("Error extracting text from page %d: %s", page_index + 1, str(page_err))
                     page_texts.append("")

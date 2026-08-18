@@ -375,7 +375,9 @@ export interface Provider {
 
 /** Mirrors the backend ProviderSearchRequest. */
 export interface ProviderSearchParams {
-  location: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
   radiusKm: number;
   specialty?: string;
   findingId?: string;

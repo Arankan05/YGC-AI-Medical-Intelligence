@@ -52,10 +52,26 @@ def _get_database_url() -> str:
 DATABASE_URL = _get_database_url()
 
 # SQLAlchemy Engine
-# pool_pre_ping enables automatic reconnection verification for pooled connections
+# Configure connection pool settings for PostgreSQL/Supabase while preserving SQLite compatibility
+is_sqlite = DATABASE_URL.startswith("sqlite")
+
+engine_kwargs = {
+    "pool_pre_ping": True,
+}
+
+if not is_sqlite:
+    engine_kwargs.update(
+        {
+            "pool_size": 20,
+            "max_overflow": 20,
+            "pool_timeout": 30,
+            "pool_recycle": 300,
+        }
+    )
+
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
+    **engine_kwargs,
 )
 
 # Session factory for creating database sessions

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session, joinedload
@@ -50,18 +50,18 @@ def _map_medication_response(med: Medication, pres: Optional[Prescription] = Non
     Helper to convert a Medication and optional Prescription into MedicationRecordResponse.
     """
     return MedicationRecordResponse(
-        id=med.id,
-        name=med.name,
-        normalized_name=med.normalized_name,
-        dosage=pres.dosage if pres else None,
-        frequency=pres.frequency if pres else None,
-        start_date=pres.start_date if pres else None,
-        end_date=pres.end_date if pres else None,
-        instructions=pres.instructions if pres else None,
-        source_document_id=pres.document_id if pres else None,
-        source_document_name=pres.document.file_name if (pres and pres.document) else None,
+        id=cast(Any, med.id),
+        name=cast(Any, med.name),
+        normalized_name=cast(Any, med.normalized_name),
+        dosage=cast(Any, pres.dosage) if pres else None,
+        frequency=cast(Any, pres.frequency) if pres else None,
+        start_date=cast(Any, pres.start_date) if pres else None,
+        end_date=cast(Any, pres.end_date) if pres else None,
+        instructions=cast(Any, pres.instructions) if pres else None,
+        source_document_id=cast(Any, pres.document_id) if pres else None,
+        source_document_name=cast(Any, pres.document.file_name) if (pres and pres.document) else None,
         status="active" if (not pres or not pres.end_date) else "stopped",
-        created_at=med.created_at,
+        created_at=cast(Any, med.created_at),
     )
 
 
@@ -109,14 +109,14 @@ def get_medical_overview(
     )
     recent_events = [
         MedicalEventRecordResponse(
-            id=ev.id,
-            event_type=ev.event_type,
-            event_date=ev.event_date,
-            title=ev.title,
-            description=ev.description,
-            source_document_id=ev.document_id,
-            source_document_name=ev.document.file_name if ev.document else None,
-            created_at=ev.created_at,
+            id=cast(Any, ev.id),
+            event_type=cast(Any, ev.event_type),
+            event_date=cast(Any, ev.event_date),
+            title=cast(Any, ev.title),
+            description=cast(Any, ev.description),
+            source_document_id=cast(Any, ev.document_id),
+            source_document_name=cast(Any, ev.document.file_name) if ev.document else None,
+            created_at=cast(Any, ev.created_at),
         )
         for ev in raw_events
     ]
@@ -145,7 +145,7 @@ def get_medical_overview(
     priority_findings = [FindingRecordResponse.model_validate(f) for f in raw_findings]
 
     return MedicalOverviewResponse(
-        patient_id=patient.id,
+        patient_id=cast(Any, patient.id),
         total_documents=total_docs,
         total_medications=total_meds,
         total_findings=total_findings,
@@ -153,7 +153,7 @@ def get_medical_overview(
         total_lab_results=total_lab,
         total_allergies=total_allergies,
         latest_summary=summary_text,
-        confidence_score=confidence_score,
+        confidence_score=cast(Any, confidence_score),
         recent_events=recent_events,
         active_medications=active_meds,
         priority_findings=priority_findings,
@@ -225,14 +225,14 @@ def get_patient_timeline(
     )
     return [
         MedicalEventRecordResponse(
-            id=ev.id,
-            event_type=ev.event_type,
-            event_date=ev.event_date,
-            title=ev.title,
-            description=ev.description,
-            source_document_id=ev.document_id,
-            source_document_name=ev.document.file_name if ev.document else None,
-            created_at=ev.created_at,
+            id=cast(Any, ev.id),
+            event_type=cast(Any, ev.event_type),
+            event_date=cast(Any, ev.event_date),
+            title=cast(Any, ev.title),
+            description=cast(Any, ev.description),
+            source_document_id=cast(Any, ev.document_id),
+            source_document_name=cast(Any, ev.document.file_name) if ev.document else None,
+            created_at=cast(Any, ev.created_at),
         )
         for ev in events
     ]
@@ -258,15 +258,15 @@ def get_patient_lab_results(
     )
     return [
         LabResultRecordResponse(
-            id=lr.id,
-            test_name=lr.test_name,
-            value=lr.value,
-            unit=lr.unit,
-            reference_range=lr.reference_range,
-            result_date=lr.result_date,
-            source_document_id=lr.document_id,
-            source_document_name=lr.document.file_name if lr.document else None,
-            created_at=lr.created_at,
+            id=cast(Any, lr.id),
+            test_name=cast(Any, lr.test_name),
+            value=cast(Any, lr.value),
+            unit=cast(Any, lr.unit),
+            reference_range=cast(Any, lr.reference_range),
+            result_date=cast(Any, lr.result_date),
+            source_document_id=cast(Any, lr.document_id),
+            source_document_name=cast(Any, lr.document.file_name) if lr.document else None,
+            created_at=cast(Any, lr.created_at),
         )
         for lr in labs
     ]

@@ -23,7 +23,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Facility categories this feature recognises, mirroring the OpenStreetMap
 # healthcare tags that Overpass returns and the ProviderKind union already
@@ -65,16 +65,30 @@ class ProviderSearchRequest(BaseModel):
     The patient is deliberately absent: it is resolved from the authenticated
     application user in the API layer and is never read from the request body.
 
+    Supports either a free-text place name ('location') or explicit GPS coordinates
+    ('latitude' and 'longitude').
+
     There is intentionally no "open now" flag. Deciding whether a facility is
     currently open would mean interpreting the source opening-hours text, and
     this feature never converts published hours into availability claims.
     """
 
-    location: str = Field(
-        ...,
-        min_length=1,
+    location: Optional[str] = Field(
+        default=None,
         max_length=_LOCATION_QUERY_MAX_LENGTH,
         description="Free-text place name to search near (city, town or area), stored as the search's location_query",
+    )
+    latitude: Optional[float] = Field(
+        default=None,
+        ge=-90.0,
+        le=90.0,
+        description="GPS latitude in decimal degrees (-90 to 90) for coordinate-based search",
+    )
+    longitude: Optional[float] = Field(
+        default=None,
+        ge=-180.0,
+        le=180.0,
+        description="GPS longitude in decimal degrees (-180 to 180) for coordinate-based search",
     )
     radius_km: float = Field(
         default=_DEFAULT_SEARCH_RADIUS_KM,
@@ -100,14 +114,25 @@ class ProviderSearchRequest(BaseModel):
         description="Optional facility categories to restrict the search to ('hospital', 'clinic', 'doctor', 'pharmacy', 'laboratory')",
     )
 
-    @field_validator("location")
-    @classmethod
-    def _validate_location(cls, value: str) -> str:
-        """Rejects a location that is only whitespace, and stores it trimmed."""
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("Location must not be empty.")
-        return cleaned
+    @model_validator(mode="after")
+    def _validate_location_or_coordinates(self) -> "ProviderSearchRequest":
+        """
+        Ensures that either a non-empty location string or both latitude and longitude are supplied.
+        """
+        has_location = bool(self.location and self.location.strip())
+        has_lat = self.latitude is not None
+        has_lon = self.longitude is not None
+
+        if has_lat != has_lon:
+            raise ValueError("Both latitude and longitude must be provided for coordinate search.")
+
+        if not has_location and not has_lat:
+            raise ValueError("Either location text or both latitude and longitude must be provided.")
+
+        if has_location and self.location:
+            self.location = self.location.strip()
+
+        return self
 
     @field_validator("specialty")
     @classmethod

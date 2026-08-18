@@ -98,22 +98,26 @@ def test_query_is_trimmed_before_sending():
     assert result.query == "Jaffna"
 
 
-def test_request_targets_the_search_endpoint_with_json_format():
+def test_request_targets_the_search_endpoint_with_json_format_and_country_restrictions():
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["url"] = str(request.url)
         seen["path"] = request.url.path
         seen["format"] = request.url.params.get("format")
+        seen["addressdetails"] = request.url.params.get("addressdetails")
+        seen["countrycodes"] = request.url.params.get("countrycodes")
         return httpx.Response(200, json=[JAFFNA])
 
     service, client = make_service(handler)
     with client:
-        service.geocode("Jaffna", client=client)
+        service.geocode("Colombo", client=client)
 
     assert seen["path"] == "/search"
     assert seen["url"].startswith(BASE_URL)
     assert seen["format"] == "jsonv2"
+    assert seen["addressdetails"] == "1"
+    assert seen["countrycodes"] == "lk"
 
 
 def test_sends_a_descriptive_user_agent():
@@ -176,6 +180,146 @@ def test_trailing_slash_on_the_base_url_does_not_double_up():
         service.geocode("Jaffna", client=client)
 
     assert seen["path"] == "/search"
+
+
+# ----------------------------------------------------------------------
+# Candidate selection and Sri Lankan locations
+# ----------------------------------------------------------------------
+
+
+def test_resolves_small_village_successfully():
+    tellippalai = {
+        "lat": "9.7820",
+        "lon": "80.0380",
+        "display_name": "Tellippalai, Jaffna District, Northern Province, Sri Lanka",
+        "address": {"village": "Tellippalai", "country_code": "lk"},
+    }
+    service, client = make_service(json_handler([tellippalai]))
+    with client:
+        result = service.geocode("Tellippalai", client=client)
+
+    assert result.query == "Tellippalai"
+    assert result.latitude == pytest.approx(9.7820)
+    assert result.longitude == pytest.approx(80.0380)
+    assert "Tellippalai" in result.display_name
+
+
+def test_prefers_sri_lankan_candidate_over_foreign_name_collision():
+    indian_nallur = {
+        "lat": "11.0500",
+        "lon": "77.3000",
+        "display_name": "Nallur, Tiruppur, Tamil Nadu, India",
+        "address": {"town": "Nallur", "country_code": "in"},
+    }
+    sri_lankan_nallur = {
+        "lat": "9.6700",
+        "lon": "80.0300",
+        "display_name": "Nallur, Jaffna District, Northern Province, Sri Lanka",
+        "address": {"suburb": "Nallur", "country_code": "lk"},
+    }
+
+    service, client = make_service(json_handler([indian_nallur, sri_lankan_nallur]))
+    with client:
+        result = service.geocode("Nallur", client=client)
+
+    assert result.latitude == pytest.approx(9.6700)
+    assert result.longitude == pytest.approx(80.0300)
+    assert "Sri Lanka" in result.display_name
+    assert result.candidate_count == 2
+
+
+def test_preserves_ranking_order_among_multiple_sri_lankan_candidates():
+    nallur_1 = {
+        "lat": "9.6700",
+        "lon": "80.0300",
+        "display_name": "Nallur, Jaffna, Sri Lanka",
+        "address": {"suburb": "Nallur", "country_code": "lk"},
+    }
+    nallur_2 = {
+        "lat": "9.6800",
+        "lon": "80.0400",
+        "display_name": "Nallur South, Jaffna, Sri Lanka",
+        "address": {"village": "Nallur South", "country_code": "lk"},
+    }
+
+    service, client = make_service(json_handler([nallur_1, nallur_2]))
+    with client:
+        result = service.geocode("Nallur", client=client)
+
+    assert result.latitude == pytest.approx(9.6700)
+    assert result.display_name == "Nallur, Jaffna, Sri Lanka"
+    assert result.candidate_count == 2
+
+
+# ----------------------------------------------------------------------
+# Fallback queries
+# ----------------------------------------------------------------------
+
+
+def test_primary_query_empty_triggers_successful_fallback():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        q = request.url.params.get("q")
+        if q == "Tellippalai":
+            return httpx.Response(200, json=[])
+        if q == "Tellippalai, Sri Lanka":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "lat": "9.7820",
+                        "lon": "80.0380",
+                        "display_name": "Tellippalai, Northern Province, Sri Lanka",
+                        "address": {"village": "Tellippalai", "country_code": "lk"},
+                    }
+                ],
+            )
+        return httpx.Response(200, json=[])
+
+    service, client = make_service(handler)
+    with client:
+        result = service.geocode("Tellippalai", client=client)
+
+    assert len(requests) == 2
+    assert requests[0].url.params.get("q") == "Tellippalai"
+    assert requests[1].url.params.get("q") == "Tellippalai, Sri Lanka"
+    assert result.query == "Tellippalai"
+    assert result.latitude == pytest.approx(9.7820)
+    assert result.longitude == pytest.approx(80.0380)
+
+
+def test_query_already_containing_sri_lanka_does_not_trigger_fallback():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=[])
+
+    service, client = make_service(handler)
+    with client:
+        with pytest.raises(LocationNotFoundError):
+            service.geocode("Tellippalai, Sri Lanka", client=client)
+
+    # Only 1 request should be made since "Sri Lanka" is already in the query.
+    assert len(requests) == 1
+    assert requests[0].url.params.get("q") == "Tellippalai, Sri Lanka"
+
+
+def test_successful_primary_query_does_not_trigger_fallback():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=[JAFFNA])
+
+    service, client = make_service(handler)
+    with client:
+        result = service.geocode("Jaffna", client=client)
+
+    assert len(requests) == 1
+    assert result.latitude == pytest.approx(9.6615)
 
 
 # ----------------------------------------------------------------------
@@ -365,6 +509,27 @@ def test_second_request_waits_out_the_minimum_interval():
     assert slept[0] == pytest.approx(0.8)
 
 
+def test_fallback_query_respects_throttling():
+    slept = []
+    clock = Clock(0.0)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        q = request.url.params.get("q")
+        if q == "Tellippalai":
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json=[JAFFNA])
+
+    service = GeocodingService(base_url=BASE_URL, sleep=slept.append, monotonic=clock)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with client:
+        service.geocode("Tellippalai", client=client)
+
+    # Initial request at t=0 sets _last_request_at=0.0. Fallback request immediately
+    # executes and waits out the full 1.0s minimum interval.
+    assert len(slept) == 1
+    assert slept[0] == pytest.approx(1.0)
+
+
 def test_no_wait_once_the_interval_has_passed():
     slept = []
     clock = Clock(0.0)
@@ -410,3 +575,4 @@ def test_errors_share_a_common_base():
 
 def test_accessor_returns_a_shared_instance():
     assert get_geocoding_service() is get_geocoding_service()
+

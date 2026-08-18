@@ -240,12 +240,16 @@ type ViewState = "loading" | "results" | "empty" | "notFound" | "unavailable";
 
 export function ProviderResultsView({
   location,
+  latitude,
+  longitude,
   radiusKm,
   availability,
   specialty,
   findingId,
 }: {
-  location: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
   radiusKm: number;
   availability?: string;
   specialty?: string;
@@ -268,6 +272,8 @@ export function ProviderResultsView({
     api()
       .searchProviders({
         location,
+        latitude,
+        longitude,
         radiusKm,
         availability,
         specialty,
@@ -294,13 +300,19 @@ export function ProviderResultsView({
     return () => {
       active = false;
     };
-  }, [location, radiusKm, availability, specialty, findingId]);
+  }, [location, latitude, longitude, radiusKm, availability, specialty, findingId]);
 
   const providers = result?.providers ?? [];
 
   const availabilityLabel = availability
     ? (AVAILABILITY_LABELS[availability] ?? availability)
     : "No preference";
+
+  const displayLocation =
+    location ||
+    (latitude !== undefined && longitude !== undefined
+      ? `Current Location (${latitude.toFixed(3)}°, ${longitude.toFixed(3)}°)`
+      : "Current Location");
 
   const criteria = [
     {
@@ -309,7 +321,7 @@ export function ProviderResultsView({
         ? describeScope(result.scopeKind, result.scopeSpecialty)
         : describeScope(specialty ? "doctor" : "hospital", specialty ?? null),
     },
-    { label: "LOCATION", value: location },
+    { label: "LOCATION", value: displayLocation },
     { label: "AVAILABILITY PREFERENCE", value: availabilityLabel },
     { label: "SEARCH RADIUS", value: `${radiusKm} km` },
   ];
@@ -329,7 +341,7 @@ export function ProviderResultsView({
     setErrorMessage(null);
     setSelectedProviderId(null);
     api()
-      .searchProviders({ location, radiusKm, availability, specialty, findingId })
+      .searchProviders({ location, latitude, longitude, radiusKm, availability, specialty, findingId })
       .then((data) => {
         setResult(data);
         setState(data.providers.length > 0 ? "results" : "empty");
@@ -594,9 +606,14 @@ export function ProviderResultsView({
 
         <ProviderMap
           providers={state === "results" ? providers : []}
-          origin={result?.origin ?? null}
+          origin={
+            result?.origin ??
+            (latitude !== undefined && longitude !== undefined
+              ? { lat: latitude, lng: longitude }
+              : null)
+          }
           radiusKm={result?.radiusKm ?? radiusKm}
-          locationLabel={location}
+          locationLabel={displayLocation}
           unavailable={state === "unavailable"}
           selectedProviderId={selectedProviderId}
           onSelectProvider={setSelectedProviderId}

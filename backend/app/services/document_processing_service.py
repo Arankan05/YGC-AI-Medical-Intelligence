@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -320,7 +320,7 @@ class DocumentProcessingService:
 
         # 5. Extract structured medical entities via AI
         try:
-            extracted_record = self.medical_extraction_service.extract_from_text(document.extracted_text)
+            extracted_record = self.medical_extraction_service.extract_from_text(cast(Optional[str], document.extracted_text))
         except AIServiceError as ae:
             logger.error("AI extraction error for document %s: %s", document_id, str(ae))
             raise HTTPException(

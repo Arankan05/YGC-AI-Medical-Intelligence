@@ -3,6 +3,8 @@ import unittest
 from PIL import Image, ImageDraw, ImageFont
 import pymupdf
 
+from typing import Any
+
 from app.services.ocr_service import (
     ImageOCRResult,
     InvalidImageError,
@@ -16,7 +18,7 @@ from app.services.ocr_service import (
 )
 
 
-def _get_test_font(size: int = 24) -> ImageFont.ImageFont:
+def _get_test_font(size: int = 24) -> Any:
     """Returns a readable PIL font for test image generation."""
     try:
         return ImageFont.load_default(size=size)

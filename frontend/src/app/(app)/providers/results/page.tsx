@@ -30,12 +30,18 @@ export default async function ProviderResultsPage({
   const params = await searchParams;
 
   const location = firstValue(params.location);
+  const latStr = firstValue(params.lat);
+  const lngStr = firstValue(params.lng);
+  const latitude = latStr !== undefined ? Number(latStr) : undefined;
+  const longitude = lngStr !== undefined ? Number(lngStr) : undefined;
+  const hasCoords = latitude !== undefined && !Number.isNaN(latitude) && longitude !== undefined && !Number.isNaN(longitude);
+
   const radiusKm = Number(firstValue(params.radius)) || 10;
   const availability = firstValue(params.availability);
   const specialty = firstValue(params.specialty);
   const findingId = firstValue(params.findingId);
 
-  if (!location) {
+  if (!location && !hasCoords) {
     return (
       <AppShell
         title="Recommended healthcare providers"
@@ -59,14 +65,18 @@ export default async function ProviderResultsPage({
     );
   }
 
+  const displayLocation = location || (hasCoords ? "Current Location" : "");
+
   return (
     <AppShell
       title="Recommended healthcare providers"
-      subtitle={`Searching within ${radiusKm} km of ${location}`}
+      subtitle={`Searching within ${radiusKm} km of ${displayLocation}`}
     >
       <Suspense fallback={null}>
         <ProviderResultsView
           location={location}
+          latitude={hasCoords ? latitude : undefined}
+          longitude={hasCoords ? longitude : undefined}
           radiusKm={radiusKm}
           availability={availability}
           specialty={specialty}

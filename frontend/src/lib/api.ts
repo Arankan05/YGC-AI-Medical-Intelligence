@@ -925,6 +925,81 @@ function mapAIAnalysis(item: BackendAIAnalysisResponse): AIAnalysisRecord {
   };
 }
 
+interface BackendChatCitationResponse {
+  document_id?: string | null;
+  documentId?: string | null;
+  document_title?: string | null;
+  documentTitle?: string | null;
+  page?: number | null;
+  quote?: string | null;
+}
+
+interface BackendChatRefusalResponse {
+  overline?: string | null;
+  headline?: string | null;
+  suggestions?: string[] | null;
+  footnote?: string | null;
+}
+
+interface BackendChatCtaResponse {
+  label?: string | null;
+  note?: string | null;
+}
+
+interface BackendChatMessageResponse {
+  id: string;
+  role?: string | null;
+  paragraphs?: string[] | null;
+  citations?: BackendChatCitationResponse[] | null;
+  confidence?: number | null;
+  guidance?: string | null;
+  refusal?: BackendChatRefusalResponse | null;
+  cta?: BackendChatCtaResponse | null;
+}
+
+function mapChatMessage(item: BackendChatMessageResponse): ChatMessage {
+  const citations = (item.citations || []).map((c) => ({
+    documentId: c.documentId || c.document_id || "",
+    documentTitle: c.documentTitle || c.document_title || "Document",
+    page: typeof c.page === "number" ? c.page : 1,
+    quote: c.quote || "",
+  }));
+
+  const refusal =
+    item.refusal && item.refusal.headline
+      ? {
+          overline: item.refusal.overline || "SAFETY NOTICE",
+          headline: item.refusal.headline,
+          suggestions: item.refusal.suggestions || [],
+          footnote:
+            item.refusal.footnote ||
+            "This assistant explains recorded medical history and does not diagnose or prescribe.",
+        }
+      : undefined;
+
+  const cta =
+    item.cta && item.cta.label
+      ? {
+          label: item.cta.label,
+          note: item.cta.note || "Consult a healthcare professional",
+        }
+      : undefined;
+
+  return {
+    id: String(item.id),
+    role: "assistant",
+    paragraphs:
+      item.paragraphs && item.paragraphs.length > 0
+        ? item.paragraphs
+        : ["No additional details available from your medical records."],
+    citations: citations.length > 0 ? citations : undefined,
+    confidence: typeof item.confidence === "number" ? item.confidence : undefined,
+    guidance: item.guidance || undefined,
+    refusal,
+    cta,
+  };
+}
+
 async function authFetch(
   path: string,
   options: RequestInit = {}
@@ -958,12 +1033,10 @@ const defaultApiImplementation: MediGuardianApi = {
     if (!data.session) {
       throw new Error("Failed to start session. Please try again.");
     }
-    // Sync application User & Patient records in PostgreSQL
-    try {
-      await authFetch("/api/auth/register", { method: "POST" });
-    } catch {
-      // Non-fatal if already registered
-    }
+    // Sync application User & Patient records in PostgreSQL asynchronously in background (non-blocking)
+    void authFetch("/api/auth/register", { method: "POST" }).catch(() => {
+      // Non-fatal if already registered or network transient
+    });
   },
 
   async signUp(input: SignUpInput): Promise<void> {
@@ -1410,15 +1483,34 @@ const defaultApiImplementation: MediGuardianApi = {
     return match;
   },
 
-  askAi: (input: AskAiInput) => unconfigured("askAi")(input),
+  async askAi(input: AskAiInput): Promise<ChatMessage> {
+    const res = await authFetch("/api/qa/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: input.question,
+        conversation_id: input.conversationId,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: "Failed to generate answer." }));
+      throw new Error(err.detail || "Failed to generate answer.");
+    }
+    const data: BackendChatMessageResponse = await res.json();
+    return mapChatMessage(data);
+  },
 
   async searchProviders(
     params: ProviderSearchParams
   ): Promise<ProviderSearchResult> {
     const body: Record<string, unknown> = {
-      location: params.location,
       radius_km: params.radiusKm,
     };
+    if (params.location) body.location = params.location;
+    if (params.latitude !== undefined && params.latitude !== null) body.latitude = params.latitude;
+    if (params.longitude !== undefined && params.longitude !== null) body.longitude = params.longitude;
     if (params.specialty) body.specialty = params.specialty;
     if (params.findingId) body.finding_id = params.findingId;
     if (params.availability) body.availability = params.availability;
@@ -1433,7 +1525,7 @@ const defaultApiImplementation: MediGuardianApi = {
     // A place name the geocoder does not recognise, or a finding that is not
     // this patient's. Both are answers, not outages.
     if (res.status === 404) {
-      throw new LocationNotFoundError(params.location);
+      throw new LocationNotFoundError(params.location || "Current Location");
     }
     // The upstream directory is down. This must stay distinct from an empty
     // result: telling a patient there are no providers near them when we simply

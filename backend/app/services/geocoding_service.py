@@ -45,6 +45,10 @@ _READ_TIMEOUT_SECONDS = 10.0
 _CANDIDATE_LIMIT = 5
 
 
+# Default country code restriction for Sri Lankan healthcare intelligence.
+_DEFAULT_COUNTRY_CODES = "lk"
+
+
 @dataclass(frozen=True)
 class GeocodedLocation:
     """
@@ -61,6 +65,14 @@ class GeocodedLocation:
     latitude: float
     longitude: float
     candidate_count: int
+
+
+@dataclass(frozen=True)
+class _ParsedCandidate:
+    display_name: str
+    latitude: float
+    longitude: float
+    is_sri_lanka: bool
 
 
 class GeocodingService:
@@ -141,11 +153,29 @@ class GeocodingService:
             "q": query,
             "format": "jsonv2",
             "limit": str(_CANDIDATE_LIMIT),
-            "addressdetails": "0",
+            "addressdetails": "1",
+            "countrycodes": _DEFAULT_COUNTRY_CODES,
         }
 
         payload = self._request(url, params, client)
-        return self._read_candidates(query, payload)
+        candidates = self._extract_candidates(query, payload)
+
+        if not candidates and "sri lanka" not in query.lower():
+            fallback_query = f"{query}, Sri Lanka"
+            fallback_params = {
+                "q": fallback_query,
+                "format": "jsonv2",
+                "limit": str(_CANDIDATE_LIMIT),
+                "addressdetails": "1",
+                "countrycodes": _DEFAULT_COUNTRY_CODES,
+            }
+            fallback_payload = self._request(url, fallback_params, client)
+            candidates = self._extract_candidates(query, fallback_payload)
+
+        if not candidates:
+            raise LocationNotFoundError(query)
+
+        return self._select_best_candidate(query, candidates)
 
     def _request(
         self,
@@ -218,14 +248,12 @@ class GeocodingService:
             if owned_client is not None:
                 owned_client.close()
 
-    def _read_candidates(self, query: str, payload: Any) -> GeocodedLocation:
+    def _extract_candidates(self, query: str, payload: Any) -> List[_ParsedCandidate]:
         """
-        Takes the highest-ranked usable candidate.
+        Extracts valid geographic candidates from Nominatim payload.
 
-        Nominatim orders candidates by its own relevance ranking, so the first
-        readable entry is the match. Entries whose coordinates cannot be read
-        are skipped rather than repaired; if none survive, the place is reported
-        as not found rather than approximated from a partial record.
+        Supports cities, towns, villages, hamlets, suburbs, neighbourhoods,
+        localities, municipalities, and administrative areas.
         """
         if not isinstance(payload, list):
             raise GeocodingUnavailableError(
@@ -233,7 +261,7 @@ class GeocodingService:
                 cause=f"expected list, got {type(payload).__name__}",
             )
 
-        candidates: List[GeocodedLocation] = []
+        candidates: List[_ParsedCandidate] = []
         for entry in payload:
             if not isinstance(entry, dict):
                 continue
@@ -246,20 +274,36 @@ class GeocodingService:
                 continue
 
             display_name = str(entry.get("display_name") or query).strip() or query
+            address = entry.get("address") if isinstance(entry.get("address"), dict) else {}
+            country_code = str(address.get("country_code") or "").strip().lower()
+            is_sri_lanka = (country_code == "lk") or ("sri lanka" in display_name.lower())
+
             candidates.append(
-                GeocodedLocation(
-                    query=query,
+                _ParsedCandidate(
                     display_name=display_name,
                     latitude=latitude,
                     longitude=longitude,
-                    candidate_count=0,
+                    is_sri_lanka=is_sri_lanka,
                 )
             )
 
+        return candidates
+
+    def _select_best_candidate(
+        self,
+        query: str,
+        candidates: List[_ParsedCandidate],
+    ) -> GeocodedLocation:
+        """
+        Selects the best candidate, prioritizing Sri Lankan results while
+        preserving Nominatim's ranking order.
+        """
         if not candidates:
             raise LocationNotFoundError(query)
 
-        best = candidates[0]
+        sri_lankan = [c for c in candidates if c.is_sri_lanka]
+        best = sri_lankan[0] if sri_lankan else candidates[0]
+
         if len(candidates) > 1:
             logger.info(
                 "Geocoded %r to %r (%d candidates considered)",
@@ -269,7 +313,7 @@ class GeocodingService:
             )
 
         return GeocodedLocation(
-            query=best.query,
+            query=query,
             display_name=best.display_name,
             latitude=best.latitude,
             longitude=best.longitude,

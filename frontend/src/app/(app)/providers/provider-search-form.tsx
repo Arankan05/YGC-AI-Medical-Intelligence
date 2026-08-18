@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { Check, Info, MapPin, Search, Stethoscope, TriangleAlert } from "lucide-react";
+import { Check, Info, Loader2, Locate, MapPin, Search, Stethoscope, TriangleAlert } from "lucide-react";
 
 import { Panel, PanelHeader } from "@/components/panel";
 import { ProviderAttribution } from "@/components/provider-attribution";
@@ -25,24 +25,89 @@ export function ProviderSearchForm() {
   const findingId = searchParams.get("findingId") ?? "";
 
   const [location, setLocation] = useState(providerSearchDefaults.location);
+  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
   const [availability, setAvailability] = useState(
     providerSearchDefaults.availability
   );
   const [radiusKm, setRadiusKm] = useState(providerSearchDefaults.radiusKm);
   const [error, setError] = useState<string | null>(null);
 
+  function handleUseCurrentLocation() {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setGeoError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setGeoLoading(true);
+    setGeoError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setCoordinates({ lat, lng });
+        setLocation("Current Location");
+        setGeoLoading(false);
+        setError(null);
+      },
+      (err) => {
+        setGeoLoading(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          setGeoError(
+            "Location permission was denied. Please allow location access in your browser or enter your city manually."
+          );
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setGeoError(
+            "Location information is currently unavailable. Please enter a city or town manually."
+          );
+        } else if (err.code === err.TIMEOUT) {
+          setGeoError(
+            "Location request timed out. Please try again or enter your city manually."
+          );
+        } else {
+          setGeoError(
+            "Could not retrieve your current location. Please enter a location manually."
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }
+
+  function handleLocationChange(value: string) {
+    setLocation(value);
+    if (coordinates) {
+      setCoordinates(null);
+    }
+    if (geoError) {
+      setGeoError(null);
+    }
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!location.trim()) {
+    if (!coordinates && !location.trim()) {
       setError("Enter a city, town or area so we can search near you.");
       return;
     }
     setError(null);
     const params = new URLSearchParams({
-      location: location.trim(),
       radius: String(radiusKm),
       availability,
     });
+    if (coordinates) {
+      params.set("lat", coordinates.lat.toFixed(6));
+      params.set("lng", coordinates.lng.toFixed(6));
+      params.set("location", location.trim() || "Current Location");
+    } else {
+      params.set("location", location.trim());
+    }
     if (findingId) params.set("findingId", findingId);
     router.push(`/providers/results?${params.toString()}`);
   }
@@ -92,12 +157,32 @@ export function ProviderSearchForm() {
             </div>
 
             <div className="flex w-full flex-col gap-[9px]">
-              <label
-                htmlFor="location"
-                className="text-xs leading-4 font-semibold text-neutral-700"
-              >
-                WHERE ARE YOU LOCATED?
-              </label>
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="location"
+                  className="text-xs leading-4 font-semibold text-neutral-700"
+                >
+                  WHERE ARE YOU LOCATED?
+                </label>
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  disabled={geoLoading}
+                  className="flex cursor-pointer items-center gap-1.5 text-xs leading-4 font-medium text-brand-700 hover:text-brand-800 disabled:opacity-50"
+                >
+                  {geoLoading ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Locating…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Locate className="size-3.5" strokeWidth={1.8} />
+                      <span>Use my current location</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="flex h-[46px] w-full items-center gap-[11px] rounded-md border-[1.5px] border-brand-600 bg-neutral-0 px-[15px]">
                 <MapPin
                   className="size-[17px] shrink-0 text-brand-700"
@@ -106,11 +191,25 @@ export function ProviderSearchForm() {
                 <input
                   id="location"
                   value={location}
-                  onChange={(event) => setLocation(event.target.value)}
+                  onChange={(event) => handleLocationChange(event.target.value)}
                   placeholder="City, town or area"
                   className="w-full bg-transparent text-[15px] leading-6 text-neutral-900 outline-none placeholder:text-neutral-500"
                 />
               </div>
+              {coordinates && (
+                <div className="flex items-center gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-medium text-brand-800">
+                  <Locate className="size-3.5 shrink-0 text-brand-700" strokeWidth={1.8} />
+                  <span>
+                    Current location active ({coordinates.lat.toFixed(4)}°, {coordinates.lng.toFixed(4)}°)
+                  </span>
+                </div>
+              )}
+              {geoError && (
+                <div className="flex items-start gap-2 rounded-md bg-risk-med-bg px-3 py-2 text-xs leading-4 text-risk-med">
+                  <TriangleAlert className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.8} />
+                  <span className="flex-1">{geoError}</span>
+                </div>
+              )}
               <div className="flex w-full items-center gap-[9px] rounded-md bg-neutral-50 px-[13px] py-2.5">
                 <Check
                   className="size-3.5 shrink-0 text-status-ok"

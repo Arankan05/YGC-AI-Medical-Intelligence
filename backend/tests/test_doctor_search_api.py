@@ -21,7 +21,7 @@ import app.models  # noqa: F401  - registers every table on Base.metadata
 from app.api.doctor_search import get_directory, get_geocoder
 from app.core.security import get_current_application_user
 from app.db.database import Base, get_db
-from app.main import app
+from app.main import app as fastapi_app
 from app.models.finding import Finding
 from app.models.patient import Patient
 from app.models.user import User
@@ -171,17 +171,17 @@ class _authenticated_client:
         def override_get_db():
             yield session
 
-        app.dependency_overrides[get_current_application_user] = lambda: self.user
-        app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_geocoder] = lambda: self.geocoder
-        app.dependency_overrides[get_directory] = lambda: self.directory
+        fastapi_app.dependency_overrides[get_current_application_user] = lambda: self.user
+        fastapi_app.dependency_overrides[get_db] = override_get_db
+        fastapi_app.dependency_overrides[get_geocoder] = lambda: self.geocoder
+        fastapi_app.dependency_overrides[get_directory] = lambda: self.directory
 
-        self._client = TestClient(app)
+        self._client = TestClient(fastapi_app)
         return self._client.__enter__()
 
     def __exit__(self, *exc_info):
         self._client.__exit__(*exc_info)
-        app.dependency_overrides.clear()
+        fastapi_app.dependency_overrides.clear()
         return False
 
 
@@ -581,16 +581,16 @@ def test_search_requires_authentication(db_session):
     def override_get_db():
         yield db_session
 
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_geocoder] = lambda: FakeGeocoder()
-    app.dependency_overrides[get_directory] = lambda: FakeDirectory([HOSPITAL])
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_geocoder] = lambda: FakeGeocoder()
+    fastapi_app.dependency_overrides[get_directory] = lambda: FakeDirectory([HOSPITAL])
     try:
-        with TestClient(app) as unauthenticated:
+        with TestClient(fastapi_app) as unauthenticated:
             assert unauthenticated.post(SEARCH_ENDPOINT, json={"location": "Jaffna"}).status_code == 401
             assert unauthenticated.get(HISTORY_ENDPOINT).status_code == 401
             assert unauthenticated.get(search_endpoint(uuid.uuid4())).status_code == 401
     finally:
-        app.dependency_overrides.clear()
+        fastapi_app.dependency_overrides.clear()
 
 
 # ----------------------------------------------------------------------
@@ -603,7 +603,7 @@ def test_routes_are_registered_under_the_api_prefix():
     Asserts against the generated OpenAPI schema rather than app.routes, so this
     also proves the endpoints are published on /docs and not merely mounted.
     """
-    paths = app.openapi()["paths"]
+    paths = fastapi_app.openapi()["paths"]
 
     assert SEARCH_ENDPOINT in paths
     assert HISTORY_ENDPOINT in paths
@@ -613,7 +613,120 @@ def test_routes_are_registered_under_the_api_prefix():
 
 
 def test_registering_the_router_did_not_disturb_the_other_features():
-    paths = app.openapi()["paths"]
+    paths = fastapi_app.openapi()["paths"]
 
     for existing in ("/api/records/overview", "/api/lab-intelligence/overview", "/api/documents"):
         assert existing in paths
+
+
+# ----------------------------------------------------------------------
+# Coordinate-based / Current Location search
+# ----------------------------------------------------------------------
+
+
+def test_successful_coordinate_based_search(client):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"latitude": 9.67, "longitude": 80.03, "radius_km": 15},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["search"]["latitude"] == pytest.approx(9.67)
+    assert body["search"]["longitude"] == pytest.approx(80.03)
+    assert body["search"]["location_query"] == "Current Location"
+    assert body["search"]["search_radius"] == pytest.approx(15.0)
+    assert len(body["recommendations"]) >= 1
+
+
+def test_coordinate_search_bypasses_nominatim_geocoding(db_session, patient_a):
+    user_a, _ = patient_a
+
+    class ThrowingGeocoder:
+        def geocode(self, *args, **kwargs):
+            raise AssertionError("Nominatim geocoder must NOT be called for coordinate searches")
+
+    with _authenticated_client(db_session, user_a, geocoder=ThrowingGeocoder()) as authed_client:
+        response = authed_client.post(
+            SEARCH_ENDPOINT,
+            json={"latitude": 9.67, "longitude": 80.03},
+        )
+        assert response.status_code == 201
+        assert response.json()["search"]["latitude"] == pytest.approx(9.67)
+
+
+def test_coordinate_search_honours_custom_location_label_without_geocoding(client):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"location": "My Clinic Point", "latitude": 9.67, "longitude": 80.03},
+    )
+    assert response.status_code == 201
+    assert response.json()["search"]["location_query"] == "My Clinic Point"
+    assert response.json()["search"]["latitude"] == pytest.approx(9.67)
+
+
+@pytest.mark.parametrize("lat", [-95.0, 95.0, -1000.0, 1000.0])
+def test_invalid_latitude_is_rejected(client, lat):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"latitude": lat, "longitude": 80.0},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("lon", [-190.0, 190.0, -1000.0, 1000.0])
+def test_invalid_longitude_is_rejected(client, lon):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"latitude": 9.0, "longitude": lon},
+    )
+    assert response.status_code == 422
+
+
+def test_latitude_without_longitude_is_rejected(client):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"latitude": 9.67},
+    )
+    assert response.status_code == 422
+
+
+def test_longitude_without_latitude_is_rejected(client):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"longitude": 80.03},
+    )
+    assert response.status_code == 422
+
+
+def test_empty_search_payload_is_rejected(client):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={},
+    )
+    assert response.status_code == 422
+
+
+def test_blank_location_and_no_coordinates_is_rejected(client):
+    response = client.post(
+        SEARCH_ENDPOINT,
+        json={"location": "   "},
+    )
+    assert response.status_code == 422
+
+
+def test_coordinate_search_requires_authentication(db_session):
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_geocoder] = lambda: FakeGeocoder()
+    fastapi_app.dependency_overrides[get_directory] = lambda: FakeDirectory([HOSPITAL])
+    try:
+        with TestClient(fastapi_app) as unauthenticated:
+            response = unauthenticated.post(
+                SEARCH_ENDPOINT,
+                json={"latitude": 9.67, "longitude": 80.03},
+            )
+            assert response.status_code == 401
+    finally:
+        fastapi_app.dependency_overrides.clear()

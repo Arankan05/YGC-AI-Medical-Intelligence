@@ -82,6 +82,7 @@ from app.services.storage_service import (
     StorageError,
     StorageFileAlreadyExistsError,
     StorageFileNotFoundError,
+    StorageFileTooLargeError,
     StorageUploadError,
     SupabaseStorageService,
     get_storage_service,

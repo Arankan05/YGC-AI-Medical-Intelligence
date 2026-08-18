@@ -344,3 +344,187 @@ def test_fetched_payload_feeds_the_discovery_parser(service):
     candidates = get_provider_discovery_service().parse_overpass_response(fetched)
     assert [c.name for c in candidates] == ["Jaffna Teaching Hospital"]
     assert candidates[0].kind == "hospital"
+
+
+# ----------------------------------------------------------------------
+# Mirror failover and fallback behavior
+# ----------------------------------------------------------------------
+
+PRIMARY_URL = "https://primary.example.org/api/interpreter"
+SECONDARY_URL = "https://secondary.example.org/api/interpreter"
+TERTIARY_URL = "https://tertiary.example.org/api/interpreter"
+
+
+@pytest.fixture
+def failover_service() -> OverpassService:
+    return OverpassService(mirrors=[PRIMARY_URL, SECONDARY_URL, TERTIARY_URL])
+
+
+def test_primary_succeeds_without_calling_mirrors(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called.append(str(request.url))
+        return httpx.Response(200, json={"elements": [HOSPITAL_ELEMENT]})
+
+    with make_client(handler) as client:
+        result = failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert len(called) == 1
+    assert called[0] == PRIMARY_URL
+    assert result["elements"] == [HOSPITAL_ELEMENT]
+
+
+def test_primary_504_fails_over_to_secondary_success(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        called.append(url)
+        if url == PRIMARY_URL:
+            return httpx.Response(504, text="Gateway Timeout")
+        if url == SECONDARY_URL:
+            return httpx.Response(200, json={"elements": [HOSPITAL_ELEMENT]})
+        return httpx.Response(500, text="Unexpected tertiary call")
+
+    with make_client(handler) as client:
+        result = failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL, SECONDARY_URL]
+    assert result["elements"] == [HOSPITAL_ELEMENT]
+
+
+def test_primary_429_fails_over_to_secondary_success(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        called.append(url)
+        if url == PRIMARY_URL:
+            return httpx.Response(429, text="Too Many Requests")
+        if url == SECONDARY_URL:
+            return httpx.Response(200, json={"elements": [HOSPITAL_ELEMENT]})
+        return httpx.Response(500, text="Unexpected tertiary call")
+
+    with make_client(handler) as client:
+        result = failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL, SECONDARY_URL]
+    assert result["elements"] == [HOSPITAL_ELEMENT]
+
+
+def test_primary_504_secondary_504_tertiary_succeeds(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        called.append(url)
+        if url == PRIMARY_URL:
+            return httpx.Response(504, text="Gateway Timeout")
+        if url == SECONDARY_URL:
+            return httpx.Response(504, text="Gateway Timeout")
+        if url == TERTIARY_URL:
+            return httpx.Response(200, json={"elements": [HOSPITAL_ELEMENT]})
+        return httpx.Response(500, text="Unexpected")
+
+    with make_client(handler) as client:
+        result = failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL, SECONDARY_URL, TERTIARY_URL]
+    assert result["elements"] == [HOSPITAL_ELEMENT]
+
+
+def test_all_mirrors_fail_transiently_raises_unavailable(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        called.append(url)
+        if url == PRIMARY_URL:
+            return httpx.Response(504, text="Gateway Timeout")
+        if url == SECONDARY_URL:
+            return httpx.Response(429, text="Rate Limited")
+        if url == TERTIARY_URL:
+            return httpx.Response(503, text="Service Unavailable")
+        return httpx.Response(500, text="Unexpected")
+
+    with make_client(handler) as client:
+        with pytest.raises(ProviderLookupUnavailableError) as excinfo:
+            failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL, SECONDARY_URL, TERTIARY_URL]
+    assert "503" in excinfo.value.cause
+
+
+def test_non_transient_400_does_not_trigger_fallback(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called.append(str(request.url))
+        return httpx.Response(400, text="Bad Request")
+
+    with make_client(handler) as client:
+        with pytest.raises(ProviderLookupUnavailableError) as excinfo:
+            failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL]
+    assert "400" in excinfo.value.cause
+
+
+def test_parsing_error_does_not_trigger_fallback(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called.append(str(request.url))
+        return httpx.Response(200, text="<html>invalid json</html>")
+
+    with make_client(handler) as client:
+        with pytest.raises(ProviderLookupUnavailableError) as excinfo:
+            failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL]
+    assert excinfo.value.cause == "invalid JSON"
+
+
+def test_unexpected_shape_does_not_trigger_fallback(failover_service):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called.append(str(request.url))
+        return httpx.Response(200, json=["unexpected", "list"])
+
+    with make_client(handler) as client:
+        with pytest.raises(ProviderLookupUnavailableError) as excinfo:
+            failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert called == [PRIMARY_URL]
+    assert "expected object" in excinfo.value.cause
+
+
+def test_provider_results_from_fallback_are_parsed_identically_to_primary(failover_service):
+    from app.services.provider_discovery_service import get_provider_discovery_service
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == PRIMARY_URL:
+            return httpx.Response(504, text="Gateway Timeout")
+        return httpx.Response(200, json={"elements": [HOSPITAL_ELEMENT]})
+
+    with make_client(handler) as client:
+        payload = failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    candidates = get_provider_discovery_service().parse_overpass_response(payload)
+    assert len(candidates) == 1
+    assert candidates[0].name == "Jaffna Teaching Hospital"
+    assert candidates[0].kind == "hospital"
+
+
+def test_fallback_does_not_produce_duplicate_records(failover_service):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == PRIMARY_URL:
+            return httpx.Response(502, text="Bad Gateway")
+        return httpx.Response(200, json={"elements": [HOSPITAL_ELEMENT]})
+
+    with make_client(handler) as client:
+        payload = failover_service.fetch_healthcare_facilities(LAT, LON, 10.0, client=client)
+
+    assert payload == {"elements": [HOSPITAL_ELEMENT]}

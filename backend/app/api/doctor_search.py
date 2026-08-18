@@ -250,26 +250,35 @@ def search_providers(
     finding = _resolve_finding(db, patient.id, payload.finding_id)
     requested_kind, specialty, query_kinds = _plan_search(payload, finding, discovery)
 
-    try:
-        located = geocoder.geocode(payload.location)
-    except LocationNotFoundError:
-        # The geocoder answered and recognised no such place. That is a correct
-        # negative answer, not an outage, so it must not be reported as one.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="We could not find that location. Try a nearby town or a different spelling.",
-        )
-    except DirectoryUnavailableError as exc:
-        logger.warning("Geocoding unavailable (%s): %s", exc.service, exc.cause)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="The location service is temporarily unavailable. Please try again shortly.",
-        )
+    if payload.latitude is not None and payload.longitude is not None:
+        lat = payload.latitude
+        lon = payload.longitude
+        location_label = payload.location or "Current Location"
+    else:
+        assert payload.location is not None
+        try:
+            located = geocoder.geocode(payload.location)
+            lat = located.latitude
+            lon = located.longitude
+            location_label = payload.location
+        except LocationNotFoundError:
+            # The geocoder answered and recognised no such place. That is a correct
+            # negative answer, not an outage, so it must not be reported as one.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="We could not find that location. Try a nearby town or a different spelling.",
+            )
+        except DirectoryUnavailableError as exc:
+            logger.warning("Geocoding unavailable (%s): %s", exc.service, exc.cause)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The location service is temporarily unavailable. Please try again shortly.",
+            )
 
     try:
         raw_payload = directory.fetch_healthcare_facilities(
-            latitude=located.latitude,
-            longitude=located.longitude,
+            latitude=lat,
+            longitude=lon,
             radius_km=payload.radius_km,
             kinds=query_kinds,
         )
@@ -285,8 +294,8 @@ def search_providers(
         candidates=candidates,
         requested_kind=requested_kind,
         requested_specialty=specialty,
-        origin_lat=located.latitude,
-        origin_lon=located.longitude,
+        origin_lat=lat,
+        origin_lon=lon,
         radius_km=payload.radius_km,
         availability_preference=payload.availability,
     )
@@ -294,11 +303,11 @@ def search_providers(
     search = persistence.record_search(
         db,
         patient_id=patient.id,
-        location_query=payload.location,
+        location_query=location_label,
         requested_kind=requested_kind,
         requested_specialty=specialty,
-        latitude=located.latitude,
-        longitude=located.longitude,
+        latitude=lat,
+        longitude=lon,
         search_radius=payload.radius_km,
         availability_preference=payload.availability,
         finding_id=finding.id if finding is not None else None,

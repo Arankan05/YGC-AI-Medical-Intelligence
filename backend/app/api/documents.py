@@ -2,7 +2,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 
 from fastapi import (
@@ -343,18 +343,18 @@ def get_document(
     )
     med_records = [
         MedicationRecordResponse(
-            id=p.id,
-            medication_id=p.medication_id,
-            name=p.medication.name if p.medication else "Unknown Medication",
-            normalized_name=p.medication.normalized_name if p.medication else None,
-            dosage=p.dosage,
-            frequency=p.frequency,
-            start_date=p.start_date,
-            end_date=p.end_date,
-            instructions=p.instructions,
-            source_document_id=document.id,
-            source_document_name=document.file_name,
-            created_at=p.created_at,
+            id=cast(Any, p.id),
+            medication_id=cast(Any, p.medication_id),
+            name=cast(Any, p.medication.name) if p.medication else "Unknown Medication",
+            normalized_name=cast(Any, p.medication.normalized_name) if p.medication else None,
+            dosage=cast(Any, p.dosage),
+            frequency=cast(Any, p.frequency),
+            start_date=cast(Any, p.start_date),
+            end_date=cast(Any, p.end_date),
+            instructions=cast(Any, p.instructions),
+            source_document_id=cast(Any, document.id),
+            source_document_name=cast(Any, document.file_name),
+            created_at=cast(Any, p.created_at),
         )
         for p in prescriptions
     ]
@@ -363,15 +363,15 @@ def get_document(
     labs = db.query(LabResult).filter(LabResult.document_id == document_id).all()
     lab_records = [
         LabResultRecordResponse(
-            id=l.id,
-            test_name=l.test_name,
-            value=l.value,
-            unit=l.unit,
-            reference_range=l.reference_range,
-            result_date=l.result_date,
-            source_document_id=document.id,
-            source_document_name=document.file_name,
-            created_at=l.created_at,
+            id=cast(Any, l.id),
+            test_name=cast(Any, l.test_name),
+            value=cast(Any, l.value),
+            unit=cast(Any, l.unit),
+            reference_range=cast(Any, l.reference_range),
+            result_date=cast(Any, l.result_date),
+            source_document_id=cast(Any, document.id),
+            source_document_name=cast(Any, document.file_name),
+            created_at=cast(Any, l.created_at),
         )
         for l in labs
     ]
@@ -380,13 +380,13 @@ def get_document(
     allergies = db.query(Allergy).filter(Allergy.source_document_id == document_id).all()
     allergy_records = [
         AllergyRecordResponse(
-            id=a.id,
-            medication_name=a.medication_name,
-            normalized_medication_name=a.normalized_medication_name,
-            reaction=a.reaction,
-            severity=a.severity,
-            source_document_id=document.id,
-            created_at=a.created_at,
+            id=cast(Any, a.id),
+            medication_name=cast(Any, a.medication_name),
+            normalized_medication_name=cast(Any, a.normalized_medication_name),
+            reaction=cast(Any, a.reaction),
+            severity=cast(Any, a.severity),
+            source_document_id=cast(Any, document.id),
+            created_at=cast(Any, a.created_at),
         )
         for a in allergies
     ]
@@ -400,14 +400,14 @@ def get_document(
     )
     event_records = [
         MedicalEventRecordResponse(
-            id=e.id,
-            event_type=e.event_type,
-            event_date=e.event_date,
-            title=e.title,
-            description=e.description,
-            source_document_id=document.id,
-            source_document_name=document.file_name,
-            created_at=e.created_at,
+            id=cast(Any, e.id),
+            event_type=cast(Any, e.event_type),
+            event_date=cast(Any, e.event_date),
+            title=cast(Any, e.title),
+            description=cast(Any, e.description),
+            source_document_id=cast(Any, document.id),
+            source_document_name=cast(Any, document.file_name),
+            created_at=cast(Any, e.created_at),
         )
         for e in events
     ]
@@ -421,14 +421,14 @@ def get_document(
     )
     finding_records = [
         FindingRecordResponse(
-            id=f.id,
-            finding_type=f.finding_type,
-            title=f.title,
-            description=f.description,
-            risk_level=f.risk_level,
-            confidence=f.confidence,
-            recommendation=f.recommendation,
-            created_at=f.created_at,
+            id=cast(Any, f.id),
+            finding_type=cast(Any, f.finding_type),
+            title=cast(Any, f.title),
+            description=cast(Any, f.description),
+            risk_level=cast(Any, f.risk_level),
+            confidence=cast(Any, f.confidence),
+            recommendation=cast(Any, f.recommendation),
+            created_at=cast(Any, f.created_at),
         )
         for f in findings
     ]
@@ -444,21 +444,21 @@ def get_document(
     ai_confidence = None
     if latest_analysis and isinstance(latest_analysis.result, dict):
         ai_summary = latest_analysis.result.get("summary")
-        ai_confidence = latest_analysis.confidence
+        ai_confidence = cast(Any, latest_analysis.confidence)
 
     return DocumentDetailResponse(
-        id=document.id,
-        patient_id=document.patient_id,
-        file_name=document.file_name,
-        file_path=document.file_path,
-        document_type=document.document_type,
-        processing_status=document.processing_status,
-        uploaded_at=document.uploaded_at,
-        processed_at=document.processed_at,
-        error_message=document.error_message,
-        extraction_method=document.extraction_method,
-        page_count=document.page_count,
-        extracted_text=document.extracted_text,
+        id=cast(Any, document.id),
+        patient_id=cast(Any, document.patient_id),
+        file_name=cast(Any, document.file_name),
+        file_path=cast(Any, document.file_path),
+        document_type=cast(Any, document.document_type),
+        processing_status=cast(Any, document.processing_status),
+        uploaded_at=cast(Any, document.uploaded_at),
+        processed_at=cast(Any, document.processed_at),
+        error_message=cast(Any, document.error_message),
+        extraction_method=cast(Any, document.extraction_method),
+        page_count=cast(Any, document.page_count),
+        extracted_text=cast(Any, document.extracted_text),
         medications=med_records,
         findings=finding_records,
         lab_results=lab_records,

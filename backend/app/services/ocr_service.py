@@ -170,7 +170,7 @@ class OCRService:
             # Perform OCR text extraction
             try:
                 raw_text = pytesseract.image_to_string(img)
-                extracted_text = raw_text.strip() if raw_text else ""
+                extracted_text = raw_text.strip() if isinstance(raw_text, str) else ""
             except (pytesseract.TesseractNotFoundError, FileNotFoundError) as t_err:
                 logger.error("Tesseract executable not found or inaccessible: %s", type(t_err).__name__)
                 raise TesseractNotFoundError("Tesseract OCR executable was not found. Configure TESSERACT_CMD or verify system PATH.") from t_err

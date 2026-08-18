@@ -27,13 +27,13 @@ logger = logging.getLogger(__name__)
 # Overpass is a shared community service and is frequently slow under load. The
 # read timeout is generous because a slow answer is still a real answer, but it
 # is bounded so a patient is not left waiting indefinitely.
-_CONNECT_TIMEOUT_SECONDS = 10.0
-_READ_TIMEOUT_SECONDS = 60.0
+_CONNECT_TIMEOUT_SECONDS = 3.0
+_READ_TIMEOUT_SECONDS = 10.0
 
 # The server-side budget declared inside the query itself. Kept below the read
 # timeout so Overpass returns its own timeout error, which is more informative
 # than the connection being cut from this side.
-_QUERY_TIMEOUT_SECONDS = 50
+_QUERY_TIMEOUT_SECONDS = 8
 
 # Overpass caps how much it will return; this bounds a dense-city query.
 _MAX_ELEMENTS = 200
@@ -52,18 +52,31 @@ _KIND_TAGS: dict = {
 
 _DEFAULT_KINDS: Tuple[str, ...] = ("hospital", "clinic", "doctor")
 
+_DEFAULT_FALLBACK_URLS: Tuple[str, ...] = (
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+)
+
+_TRANSIENT_STATUS_CODES = {429, 502, 503, 504}
+
 
 class OverpassService:
     """
-    Fetches healthcare facilities near a point from the Overpass API.
+    Fetches healthcare facilities near a point from the Overpass API with mirror failover.
 
     Query construction is a pure method, so the generated Overpass QL can be
     asserted in tests without any network involvement.
     """
 
-    def __init__(self, base_url: Optional[str] = None, user_agent: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        mirrors: Optional[Sequence[str]] = None,
+    ) -> None:
         self._base_url = base_url
         self._user_agent = user_agent
+        self._mirrors = tuple(mirrors) if mirrors is not None else None
 
     def _resolve_user_agent(self) -> str:
         """
@@ -76,14 +89,35 @@ class OverpassService:
             return self._user_agent
         return build_user_agent(get_settings().PROVIDER_DIRECTORY_CONTACT)
 
-    def _resolve_base_url(self) -> str:
-        base_url = self._base_url or get_settings().OVERPASS_URL
-        if not base_url or not str(base_url).strip():
+    def _resolve_endpoints(self) -> Tuple[str, ...]:
+        """
+        Resolves the ordered list of Overpass endpoints (primary + fallback mirrors).
+        """
+        if self._mirrors is not None:
+            endpoints = tuple(m.strip() for m in self._mirrors if m and m.strip())
+            if not endpoints:
+                raise ProviderLookupUnavailableError(
+                    "No healthcare directory service is configured.",
+                    cause="OVERPASS_URL is empty",
+                )
+            return endpoints
+
+        primary = (self._base_url or get_settings().OVERPASS_URL or "").strip()
+        if not primary:
             raise ProviderLookupUnavailableError(
                 "No healthcare directory service is configured.",
                 cause="OVERPASS_URL is empty",
             )
-        return str(base_url).strip()
+
+        endpoints = [primary]
+        for fallback in _DEFAULT_FALLBACK_URLS:
+            if fallback not in endpoints:
+                endpoints.append(fallback)
+        return tuple(endpoints)
+
+    def _resolve_base_url(self) -> str:
+        endpoints = self._resolve_endpoints()
+        return endpoints[0]
 
     def build_query(
         self,
@@ -152,17 +186,17 @@ class OverpassService:
         client: Optional[httpx.Client] = None,
     ) -> Any:
         """
-        Runs the query and returns the decoded Overpass payload.
+        Runs the query across primary and fallback Overpass mirrors until successful.
 
         A successful response with no elements is returned as-is: that is a
         genuine "nothing here", and it is the caller's empty state, not an error.
 
         Raises:
-            ProviderLookupUnavailableError: The directory could not be reached,
+            ProviderLookupUnavailableError: All directories could not be reached,
                 timed out, refused the query, or returned something unreadable.
         """
         query = self.build_query(latitude, longitude, radius_km, kinds)
-        url = self._resolve_base_url()
+        endpoints = self._resolve_endpoints()
 
         owned_client: Optional[httpx.Client] = None
         if client is None:
@@ -177,67 +211,101 @@ class OverpassService:
             )
             client = owned_client
 
+        last_error: Optional[ProviderLookupUnavailableError] = None
+
         try:
-            try:
-                response = client.post(
-                    url,
-                    content=query.encode("utf-8"),
-                    headers={
-                        "User-Agent": self._resolve_user_agent(),
-                        "Accept": "application/json",
-                        "Content-Type": "text/plain; charset=utf-8",
-                    },
-                )
-            except httpx.TimeoutException as exc:
-                logger.warning("Overpass request timed out: %s", type(exc).__name__)
-                raise ProviderLookupUnavailableError(
-                    "The healthcare directory did not respond in time.",
-                    cause=type(exc).__name__,
-                ) from exc
-            except httpx.HTTPError as exc:
-                logger.warning("Overpass request failed: %s", type(exc).__name__)
-                raise ProviderLookupUnavailableError(
-                    "The healthcare directory could not be reached.",
-                    cause=type(exc).__name__,
-                ) from exc
+            for idx, url in enumerate(endpoints):
+                has_next = idx < len(endpoints) - 1
+                try:
+                    response = client.post(
+                        url,
+                        content=query.encode("utf-8"),
+                        headers={
+                            "User-Agent": self._resolve_user_agent(),
+                            "Accept": "application/json",
+                            "Content-Type": "text/plain; charset=utf-8",
+                        },
+                    )
+                except httpx.TimeoutException as exc:
+                    logger.warning("Overpass request to %s timed out: %s", url, type(exc).__name__)
+                    last_error = ProviderLookupUnavailableError(
+                        "The healthcare directory did not respond in time.",
+                        cause=type(exc).__name__,
+                    )
+                    if has_next:
+                        logger.info("Overpass endpoint timed out; trying fallback endpoint.")
+                        continue
+                    raise last_error from exc
+                except httpx.HTTPError as exc:
+                    logger.warning("Overpass request to %s failed: %s", url, type(exc).__name__)
+                    last_error = ProviderLookupUnavailableError(
+                        "The healthcare directory could not be reached.",
+                        cause=type(exc).__name__,
+                    )
+                    if has_next:
+                        logger.info("Overpass endpoint connection failed; trying fallback endpoint.")
+                        continue
+                    raise last_error from exc
 
-            if response.status_code >= 400:
-                logger.warning("Overpass returned HTTP %s", response.status_code)
-                raise ProviderLookupUnavailableError(
-                    "The healthcare directory rejected the request."
-                    if response.status_code < 500
-                    else "The healthcare directory is temporarily unavailable.",
-                    cause=f"HTTP {response.status_code}",
-                )
+                # Check HTTP status codes
+                if response.status_code >= 400:
+                    status = response.status_code
+                    logger.warning("Overpass returned HTTP %s from %s", status, url)
+                    is_transient = status in _TRANSIENT_STATUS_CODES
+                    error_msg = (
+                        "The healthcare directory rejected the request."
+                        if status < 500
+                        else "The healthcare directory is temporarily unavailable."
+                    )
+                    last_error = ProviderLookupUnavailableError(
+                        error_msg,
+                        cause=f"HTTP {status}",
+                    )
+                    if is_transient and has_next:
+                        logger.info("Overpass endpoint failed with HTTP %s; trying fallback endpoint.", status)
+                        continue
+                    raise last_error
 
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                logger.warning("Overpass returned a non-JSON body.")
-                raise ProviderLookupUnavailableError(
-                    "The healthcare directory returned an unreadable response.",
-                    cause="invalid JSON",
-                ) from exc
+                # Parse JSON response
+                try:
+                    payload = response.json()
+                except ValueError as exc:
+                    logger.warning("Overpass returned a non-JSON body from %s.", url)
+                    raise ProviderLookupUnavailableError(
+                        "The healthcare directory returned an unreadable response.",
+                        cause="invalid JSON",
+                    ) from exc
 
-            if not isinstance(payload, dict):
-                raise ProviderLookupUnavailableError(
-                    "The healthcare directory returned an unexpected response shape.",
-                    cause=f"expected object, got {type(payload).__name__}",
-                )
+                if not isinstance(payload, dict):
+                    raise ProviderLookupUnavailableError(
+                        "The healthcare directory returned an unexpected response shape.",
+                        cause=f"expected object, got {type(payload).__name__}",
+                    )
 
-            # Overpass reports a server-side timeout inside a 200 response, so a
-            # remark must be inspected rather than assumed to be informational.
-            remark = payload.get("remark")
-            if isinstance(remark, str) and any(
-                token in remark.lower() for token in ("timed out", "timeout", "runtime error")
-            ):
-                logger.warning("Overpass reported a query error: %s", remark)
-                raise ProviderLookupUnavailableError(
-                    "The healthcare directory could not complete the search in time.",
-                    cause=remark.strip()[:200],
-                )
+                # Overpass reports server-side timeouts in a remark within a 200 response
+                remark = payload.get("remark")
+                if isinstance(remark, str) and any(
+                    token in remark.lower() for token in ("timed out", "timeout", "runtime error")
+                ):
+                    logger.warning("Overpass reported a query error from %s: %s", url, remark)
+                    last_error = ProviderLookupUnavailableError(
+                        "The healthcare directory could not complete the search in time.",
+                        cause=remark.strip()[:200],
+                    )
+                    if has_next:
+                        logger.info("Overpass reported query timeout; trying fallback endpoint.")
+                        continue
+                    raise last_error
 
-            return payload
+                # Successful valid response obtained from mirror
+                return payload
+
+            if last_error:
+                raise last_error
+            raise ProviderLookupUnavailableError(
+                "The healthcare directory is temporarily unavailable.",
+                cause="All Overpass endpoints failed",
+            )
         finally:
             if owned_client is not None:
                 owned_client.close()
