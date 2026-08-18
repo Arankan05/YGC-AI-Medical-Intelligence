@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "leaflet/dist/leaflet.css";
 
 /*
  * Design tokens mirrored from the MediGuardian AI Figma file
@@ -192,3 +193,28 @@
     scrollbar-color: var(--neutral-300) transparent;
   }
 }
+
+/* Leaflet Custom Marker & Popup Overrides */
+.custom-provider-pin,
+.custom-origin-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 10px !important;
+  box-shadow: 0 4px 14px 0 rgba(15, 23, 42, 0.12) !important;
+  border: 1px solid var(--neutral-200) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.leaflet-popup-content {
+  margin: 8px 10px !important;
+  line-height: 1.4 !important;
+}
+
+.leaflet-container {
+  font-family: inherit !important;
+}
+

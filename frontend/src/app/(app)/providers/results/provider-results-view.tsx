@@ -73,25 +73,34 @@ function describeScope(kind: string, specialty: string | null): string {
 function ProviderCard({
   provider,
   rank,
+  isSelected = false,
+  onSelect,
 }: {
   provider: Provider;
   rank: number;
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
 }) {
   const top = rank === 1;
   const kindLabel = KIND_LABELS[provider.kind] ?? "PROVIDER";
 
   return (
     <article
+      onClick={() => onSelect?.(provider.id)}
       className={cn(
-        "flex w-full flex-col gap-2.5 rounded-[11px] border px-[15px] py-[13px]",
-        top ? "border-brand-200 bg-brand-50" : "border-neutral-200 bg-neutral-0"
+        "flex w-full flex-col gap-2.5 rounded-[11px] border px-[15px] py-[13px] transition-all cursor-pointer",
+        isSelected
+          ? "border-brand-500 bg-brand-50/80 ring-2 ring-brand-600 shadow-sm"
+          : top
+            ? "border-brand-200 bg-brand-50 hover:border-brand-300"
+            : "border-neutral-200 bg-neutral-0 hover:border-neutral-300 hover:bg-neutral-50/50"
       )}
     >
       <div className="flex w-full items-center gap-3">
         <span
           className={cn(
-            "flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs leading-4 font-semibold text-neutral-0",
-            top ? "bg-brand-700" : "bg-sidebar-active-bg"
+            "flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs leading-4 font-semibold text-neutral-0 transition-colors",
+            isSelected ? "bg-brand-800" : top ? "bg-brand-700" : "bg-sidebar-active-bg"
           )}
         >
           {rank}
@@ -116,7 +125,7 @@ function ProviderCard({
           <span
             className={cn(
               "text-lg leading-[26px] font-semibold tracking-[-0.2px]",
-              top ? "text-brand-800" : "text-neutral-800"
+              isSelected ? "text-brand-900 font-bold" : top ? "text-brand-800" : "text-neutral-800"
             )}
           >
             {provider.matchScore}
@@ -174,18 +183,26 @@ function ProviderCard({
         </div>
         {provider.coordinates && (
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={`https://www.openstreetmap.org/?mlat=${provider.coordinates.lat}&mlon=${provider.coordinates.lng}#map=17/${provider.coordinates.lat}/${provider.coordinates.lng}`}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="rounded-[7px] border border-neutral-300 bg-neutral-0 px-[13px] py-2 text-xs leading-4 font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect?.(provider.id);
+              }}
+              className={cn(
+                "rounded-[7px] border px-[13px] py-2 text-xs leading-4 font-semibold transition-colors",
+                isSelected
+                  ? "border-brand-600 bg-brand-700 text-white hover:bg-brand-800"
+                  : "border-neutral-300 bg-neutral-0 text-neutral-700 hover:bg-neutral-50"
+              )}
             >
               View on map
-            </a>
+            </button>
             <a
               href={`https://www.openstreetmap.org/directions?to=${provider.coordinates.lat}%2C${provider.coordinates.lng}`}
               target="_blank"
               rel="noreferrer noopener"
+              onClick={(e) => e.stopPropagation()}
               className="rounded-[7px] border border-neutral-300 bg-neutral-0 px-[13px] py-2 text-xs leading-4 font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
             >
               Directions
@@ -240,11 +257,13 @@ export function ProviderResultsView({
   const [state, setState] = useState<ViewState>("loading");
   const [result, setResult] = useState<ProviderSearchResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setState("loading");
     setErrorMessage(null);
+    setSelectedProviderId(null);
 
     api()
       .searchProviders({
@@ -308,6 +327,7 @@ export function ProviderResultsView({
     router.refresh();
     setState("loading");
     setErrorMessage(null);
+    setSelectedProviderId(null);
     api()
       .searchProviders({ location, radiusKm, availability, specialty, findingId })
       .then((data) => {
@@ -383,6 +403,8 @@ export function ProviderResultsView({
                     key={provider.id}
                     provider={provider}
                     rank={index + 1}
+                    isSelected={selectedProviderId === provider.id}
+                    onSelect={setSelectedProviderId}
                   />
                 ))}
                 <div className="flex w-full items-center gap-[9px] rounded-md bg-neutral-50 px-[13px] py-2.5">
@@ -576,6 +598,8 @@ export function ProviderResultsView({
           radiusKm={result?.radiusKm ?? radiusKm}
           locationLabel={location}
           unavailable={state === "unavailable"}
+          selectedProviderId={selectedProviderId}
+          onSelectProvider={setSelectedProviderId}
           className="min-h-[420px] w-full self-stretch xl:w-[452px] xl:shrink-0"
         />
       </div>
