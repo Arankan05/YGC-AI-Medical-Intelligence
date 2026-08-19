@@ -14,8 +14,15 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import Settings, get_settings
 from app.db.database import Base, get_db
 from app.main import app
+from app.models.ai_analysis import AIAnalysis
+from app.models.allergy import Allergy
 from app.models.document import Document
+from app.models.finding import Finding
+from app.models.lab_result import LabResult
+from app.models.medical_event import MedicalEvent
+from app.models.medication import Medication
 from app.models.patient import Patient
+from app.models.prescription import Prescription
 from app.models.user import User
 from app.services.document_processing_service import (
     DocumentProcessingService,

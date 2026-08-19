@@ -24,6 +24,7 @@ from app.models.document import Document
 from app.models.finding import Finding
 from app.models.lab_result import LabResult
 from app.models.medical_event import MedicalEvent
+from app.models.medication import Medication
 from app.models.patient import Patient
 from app.models.prescription import Prescription
 from app.models.user import User
@@ -473,7 +474,7 @@ def get_document(
     "/{document_id}",
     response_model=DocumentDeleteResponse,
     summary="Delete a medical document",
-    description="Deletes a medical document from Supabase Storage and deletes the database record after verifying ownership.",
+    description="Deletes a medical document from Supabase Storage and deletes the database record and derived clinical entities after verifying ownership.",
 )
 def delete_document(
     document_id: UUID,
@@ -482,11 +483,12 @@ def delete_document(
     storage_service: SupabaseStorageService = Depends(get_storage_service),
 ) -> DocumentDeleteResponse:
     """
-    Deletes a document from storage and database.
+    Deletes a document from storage and database, along with all derived clinical records.
     Order of operations:
     1. Verify patient ownership (404/403).
     2. Delete the file from Supabase Storage.
-    3. Delete the database record.
+    3. Delete derived records (events, prescriptions, orphan medications, lab results, allergies, findings, AI analyses).
+    4. Delete the document database record.
     If storage deletion fails, database deletion is aborted to prevent inconsistent state.
     """
     patient = get_patient_for_user(current_user, db)
@@ -510,7 +512,6 @@ def delete_document(
             detail="You do not have permission to delete this document.",
         )
 
-    # 1. Delete from Supabase storage first
     file_path = str(document.file_path)
     try:
         storage_service.delete_file(file_path)
@@ -526,10 +527,97 @@ def delete_document(
             detail="Failed to delete document from storage.",
         )
 
-    # 2. Delete database record
+    # 2. Delete database record and derived clinical entities
     try:
+        # A. Delete derived Medical Events
+        db.query(MedicalEvent).filter(
+            MedicalEvent.document_id == document_id,
+            MedicalEvent.patient_id == patient.id,
+        ).delete(synchronize_session=False)
+
+        # B. Delete derived Prescriptions and orphan Medications
+        prescriptions = (
+            db.query(Prescription)
+            .filter(
+                Prescription.document_id == document_id,
+                Prescription.patient_id == patient.id,
+            )
+            .all()
+        )
+        affected_med_ids = set(p.medication_id for p in prescriptions if p.medication_id)
+
+        for pres in prescriptions:
+            db.delete(pres)
+        db.flush()
+
+        # Check affected medications and remove those with zero remaining prescriptions
+        for med_id in affected_med_ids:
+            remaining_count = (
+                db.query(Prescription)
+                .filter(Prescription.medication_id == med_id)
+                .count()
+            )
+            if remaining_count == 0:
+                orphan_med = (
+                    db.query(Medication)
+                    .filter(
+                        Medication.id == med_id,
+                        Medication.patient_id == patient.id,
+                    )
+                    .first()
+                )
+                if orphan_med:
+                    db.delete(orphan_med)
+
+        # C. Delete derived Lab Results
+        db.query(LabResult).filter(
+            LabResult.document_id == document_id,
+            LabResult.patient_id == patient.id,
+        ).delete(synchronize_session=False)
+
+        # D. Delete derived Allergies
+        db.query(Allergy).filter(
+            Allergy.source_document_id == document_id,
+            Allergy.patient_id == patient.id,
+        ).delete(synchronize_session=False)
+
+        # E. Delete derived Findings and their associated AI Analyses
+        findings = (
+            db.query(Finding)
+            .filter(
+                Finding.source_document_id == document_id,
+                Finding.patient_id == patient.id,
+            )
+            .all()
+        )
+        finding_ids = [f.id for f in findings]
+        if finding_ids:
+            db.query(AIAnalysis).filter(
+                AIAnalysis.finding_id.in_(finding_ids),
+                AIAnalysis.patient_id == patient.id,
+            ).delete(synchronize_session=False)
+
+        for finding in findings:
+            db.delete(finding)
+
+        # F. Delete Document-Extraction AI Analyses (matched by patient_id and result["document_id"])
+        str_doc_id = str(document_id)
+        doc_analyses = (
+            db.query(AIAnalysis)
+            .filter(
+                AIAnalysis.patient_id == patient.id,
+                AIAnalysis.analysis_type == "document_extraction",
+            )
+            .all()
+        )
+        for an in doc_analyses:
+            if isinstance(an.result, dict) and an.result.get("document_id") == str_doc_id:
+                db.delete(an)
+
+        # G. Delete Document record itself
         db.delete(document)
         db.commit()
+
     except Exception as db_err:
         db.rollback()
         logger.error(
