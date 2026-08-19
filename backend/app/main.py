@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -15,14 +17,25 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://192.168.56.1:3000",
+    "https://ygc-ai-medical-intelligence.vercel.app",
+    "https://ygc-ai-medical-intelligence-po0xhap8n.vercel.app",
+    "https://ygc-ai-medical-intelligence-kp5dl7vfq.vercel.app",
+]
+
+env_cors = os.getenv("CORS_ORIGINS") or os.getenv("FRONTEND_URL")
+if env_cors:
+    for item in env_cors.split(","):
+        cleaned = item.strip().rstrip("/")
+        if cleaned and cleaned not in allowed_origins:
+            allowed_origins.append(cleaned)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://192.168.56.1:3000",
-        "https://ygc-ai-medical-intelligence-po0xhap8n.vercel.app",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
