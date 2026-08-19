@@ -910,9 +910,10 @@ interface BackendAIAnalysisResponse {
 function mapAIAnalysis(item: BackendAIAnalysisResponse): AIAnalysisRecord {
   const resObj = typeof item.result === "object" && item.result !== null ? item.result : {};
   const summary = typeof resObj.summary === "string" ? resObj.summary : undefined;
+  const rawConfidence = typeof item.confidence === "number" ? item.confidence : (typeof resObj.confidence === "number" ? resObj.confidence : undefined);
   const confidencePct =
-    typeof item.confidence === "number"
-      ? Math.round(item.confidence <= 1 ? item.confidence * 100 : item.confidence)
+    typeof rawConfidence === "number"
+      ? Math.round(rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence)
       : undefined;
 
   return {

@@ -132,10 +132,44 @@ export interface AllergyRecord {
   createdAt: string;
 }
 
+export interface DocumentExtractionCounts {
+  events?: number;
+  medications?: number;
+  prescriptions?: number;
+  lab_results?: number;
+  allergies?: number;
+  findings?: number;
+  ai_analyses?: number;
+}
+
+export interface DocumentExtractionResultPayload {
+  summary?: string | null;
+  document_type_detected?: string | null;
+  confidence_score?: number | null;
+  persisted_counts?: DocumentExtractionCounts;
+}
+
+export interface QAResultPayload {
+  paragraphs?: string[];
+  citations?: ChatCitation[];
+  confidence?: number | null;
+  guidance?: string | null;
+  refusal?: {
+    overline?: string;
+    headline?: string;
+    suggestions?: string[];
+    footnote?: string;
+  } | null;
+  cta?: {
+    label?: string;
+    note?: string;
+  } | null;
+}
+
 export interface AIAnalysisRecord {
   id: string;
   analysisType: string;
-  result: Record<string, unknown>;
+  result: Record<string, unknown> | DocumentExtractionResultPayload | QAResultPayload;
   confidence?: number;
   relatedFindingId?: string;
   relatedFindingTitle?: string;
