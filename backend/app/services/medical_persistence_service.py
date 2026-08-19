@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -53,17 +53,75 @@ class MedicalPersistenceService:
 
         try:
             # 1. Persist Medical Events
-            for ev in extracted.events:
-                event_record = MedicalEvent(
-                    patient_id=patient_id,
-                    document_id=document_id,
-                    event_type=ev.event_type or "consultation",
-                    event_date=ev.event_date,
-                    title=ev.title,
-                    description=ev.description,
+            if extracted.events:
+                for ev in extracted.events:
+                    event_record = MedicalEvent(
+                        patient_id=patient_id,
+                        document_id=document_id,
+                        event_type=ev.event_type or "consultation",
+                        event_date=ev.event_date,
+                        title=ev.title,
+                        description=ev.description,
+                    )
+                    db.add(event_record)
+                    counts["events"] += 1
+            else:
+                # Fallback: If no explicit events were extracted, create a single fallback MedicalEvent
+                # for clinically meaningful document types or documents with extracted clinical entities.
+                doc_type = (extracted.document_type_detected or "unknown").strip().lower()
+                has_extracted_data = bool(
+                    extracted.summary
+                    or extracted.medications
+                    or extracted.lab_results
+                    or extracted.findings
+                    or extracted.allergies
                 )
-                db.add(event_record)
-                counts["events"] += 1
+
+                if doc_type in ("prescription", "lab_report", "discharge_summary", "consultation_note") or (doc_type == "other" and has_extracted_data):
+                    if doc_type == "prescription":
+                        fallback_type = "prescription"
+                        fallback_title = "Prescription Medical Encounter"
+                    elif doc_type == "lab_report":
+                        fallback_type = "lab_test"
+                        fallback_title = "Laboratory Diagnostic Report"
+                    elif doc_type == "discharge_summary":
+                        fallback_type = "discharge"
+                        fallback_title = "Hospital Discharge Encounter"
+                    elif doc_type == "consultation_note":
+                        fallback_type = "consultation"
+                        fallback_title = "Clinical Consultation Encounter"
+                    else:
+                        fallback_type = "consultation"
+                        fallback_title = "Medical Document Encounter"
+
+                    # Idempotency check for fallback event: verify if an event already exists for this document
+                    existing_event = (
+                        db.query(MedicalEvent)
+                        .filter(
+                            MedicalEvent.patient_id == patient_id,
+                            MedicalEvent.document_id == document_id,
+                        )
+                        .first()
+                    )
+
+                    if existing_event:
+                        cast(Any, existing_event).event_type = fallback_type
+                        cast(Any, existing_event).title = fallback_title
+                        if extracted.summary:
+                            cast(Any, existing_event).description = extracted.summary
+                        counts["events"] += 1
+                    else:
+                        fallback_record = MedicalEvent(
+                            patient_id=patient_id,
+                            document_id=document_id,
+                            event_type=fallback_type,
+                            event_date=None,  # NEVER invent clinical dates; preserve None
+                            title=fallback_title,
+                            description=extracted.summary or f"Medical encounter from {doc_type.replace('_', ' ')}",
+                        )
+                        db.add(fallback_record)
+                        counts["events"] += 1
+
 
             # 2. Persist Medications and Prescriptions with deduplication
             for med in extracted.medications:
@@ -134,19 +192,50 @@ class MedicalPersistenceService:
                 db.add(allergy_record)
                 counts["allergies"] += 1
 
-            # 5. Persist Findings
+            # 5. Persist Findings with document-scoped idempotency
+            processed_finding_titles: set[str] = set()
+
             for fd in extracted.findings:
-                finding_record = Finding(
-                    patient_id=patient_id,
-                    finding_type=fd.finding_type or "diagnosis",
-                    title=fd.title,
-                    description=fd.description,
-                    risk_level=fd.risk_level,
-                    confidence=fd.confidence,
-                    recommendation=fd.recommendation,
+                clean_title = (fd.title or "").strip()
+                if not clean_title:
+                    continue
+
+                # Deduplicate identical finding titles within the same extraction payload
+                if clean_title in processed_finding_titles:
+                    continue
+                processed_finding_titles.add(clean_title)
+
+                existing_finding = (
+                    db.query(Finding)
+                    .filter(
+                        Finding.patient_id == patient_id,
+                        Finding.source_document_id == document_id,
+                        Finding.title == clean_title,
+                    )
+                    .first()
                 )
-                db.add(finding_record)
-                counts["findings"] += 1
+
+                if existing_finding:
+                    cast(Any, existing_finding).finding_type = fd.finding_type or "diagnosis"
+                    cast(Any, existing_finding).description = fd.description
+                    cast(Any, existing_finding).risk_level = fd.risk_level
+                    cast(Any, existing_finding).confidence = fd.confidence
+                    cast(Any, existing_finding).recommendation = fd.recommendation
+                    counts["findings"] += 1
+                else:
+                    finding_record = Finding(
+                        patient_id=patient_id,
+                        source_document_id=document_id,
+                        finding_type=fd.finding_type or "diagnosis",
+                        title=clean_title,
+                        description=fd.description,
+                        risk_level=fd.risk_level,
+                        confidence=fd.confidence,
+                        recommendation=fd.recommendation,
+                    )
+                    db.add(finding_record)
+                    counts["findings"] += 1
+
 
             # 6. Persist or Update AI Analysis Record (Idempotent per document)
             str_doc_id = str(document_id)
@@ -174,8 +263,8 @@ class MedicalPersistenceService:
                     break
 
             if existing_analysis:
-                existing_analysis.result = result_payload
-                existing_analysis.confidence = extracted.confidence_score
+                cast(Any, existing_analysis).result = result_payload
+                cast(Any, existing_analysis).confidence = extracted.confidence_score
                 counts["ai_analyses"] += 1
             else:
                 analysis_record = AIAnalysis(

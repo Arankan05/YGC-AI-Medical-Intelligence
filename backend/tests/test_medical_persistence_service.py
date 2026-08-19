@@ -457,3 +457,290 @@ class MedicalPersistenceServiceTestCase(unittest.TestCase):
             .all()
         )
         assert len(all_analyses) == 2
+
+    def test_empty_events_fallback_creation(self):
+        # Given: events = [] for consultation_note document
+        rec = ExtractedMedicalRecord(
+            document_type_detected="consultation_note",
+            summary="Patient attended a medical consultation for chronic cough.",
+            confidence_score=0.9,
+            events=[],
+        )
+
+        counts = self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec,
+        )
+
+        assert counts["events"] == 1
+        events = self.db.query(MedicalEvent).filter(MedicalEvent.patient_id == self.patient.id).all()
+        assert len(events) == 1
+        assert events[0].document_id == self.document_id
+        assert events[0].patient_id == self.patient_id
+        assert events[0].event_type == "consultation"
+        assert events[0].event_date is None  # NEVER invent clinical date
+        assert events[0].title == "Clinical Consultation Encounter"
+        assert "Patient attended a medical consultation" in events[0].description
+
+    def test_explicit_events_prevent_fallback_creation(self):
+        # Given: events = [explicit_event]
+        explicit_ev = ExtractedMedicalEvent(
+            event_type="procedure",
+            event_date=date(2026, 5, 10),
+            title="Colonoscopy Procedure",
+            description="Routine screening colonoscopy",
+        )
+        rec = ExtractedMedicalRecord(
+            document_type_detected="consultation_note",
+            summary="Procedure note",
+            confidence_score=0.95,
+            events=[explicit_ev],
+        )
+
+        counts = self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec,
+        )
+
+        assert counts["events"] == 1
+        events = self.db.query(MedicalEvent).filter(MedicalEvent.patient_id == self.patient.id).all()
+        assert len(events) == 1
+        assert events[0].title == "Colonoscopy Procedure"
+        assert events[0].event_date == date(2026, 5, 10)
+
+    def test_fallback_event_reextraction_idempotency(self):
+        # Extract twice with events = []
+        rec = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="Initial Rx summary",
+            confidence_score=0.9,
+            events=[],
+        )
+
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec,
+        )
+
+        rec_updated = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="Updated Rx summary",
+            confidence_score=0.95,
+            events=[],
+        )
+
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec_updated,
+        )
+
+        # Should still be exactly 1 MedicalEvent for this document
+        events = self.db.query(MedicalEvent).filter(MedicalEvent.patient_id == self.patient.id).all()
+        assert len(events) == 1
+        assert events[0].description == "Updated Rx summary"
+
+    def test_fallback_event_multiple_documents(self):
+        doc2_id = uuid.uuid4()
+        doc2 = Document(
+            id=doc2_id,
+            patient_id=self.patient_id,
+            file_name="lab_report.pdf",
+            file_path="uploads/lab_report.pdf",
+            document_type="lab_report",
+            processing_status="COMPLETED",
+        )
+        self.db.add(doc2)
+        self.db.commit()
+
+        rec1 = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="Rx 1",
+            events=[],
+        )
+        rec2 = ExtractedMedicalRecord(
+            document_type_detected="lab_report",
+            summary="Lab Report 2",
+            events=[],
+        )
+
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec1)
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=doc2_id, extracted=rec2)
+
+        events = self.db.query(MedicalEvent).filter(MedicalEvent.patient_id == self.patient.id).all()
+        assert len(events) == 2
+        doc_ids = {e.document_id for e in events}
+        assert self.document_id in doc_ids
+        assert doc2_id in doc_ids
+
+    def test_finding_creation_with_source_document_id(self):
+        rec = ExtractedMedicalRecord(
+            document_type_detected="consultation_note",
+            summary="Patient has elevated temperature.",
+            findings=[
+                ExtractedFinding(
+                    finding_type="symptom",
+                    title="High Body Temperature",
+                    description="Fever of 38.5C observed",
+                    risk_level="high",
+                    confidence=0.95,
+                    recommendation="Administer antipyretics",
+                )
+            ],
+        )
+
+        counts = self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec,
+        )
+
+        assert counts["findings"] == 1
+        findings = self.db.query(Finding).filter(Finding.patient_id == self.patient_id).all()
+        assert len(findings) == 1
+        assert findings[0].title == "High Body Temperature"
+        assert findings[0].source_document_id == self.document_id
+
+    def test_finding_same_document_reextraction_idempotency(self):
+        # Extraction #1
+        rec1 = ExtractedMedicalRecord(
+            document_type_detected="consultation_note",
+            summary="Initial assessment",
+            findings=[
+                ExtractedFinding(
+                    finding_type="symptom",
+                    title="High Body Temperature",
+                    description="Initial fever note",
+                    risk_level="medium",
+                    confidence=0.8,
+                )
+            ],
+        )
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec1)
+
+        # Extraction #2 (Re-extraction of Document A with updated values)
+        rec2 = ExtractedMedicalRecord(
+            document_type_detected="consultation_note",
+            summary="Updated assessment",
+            findings=[
+                ExtractedFinding(
+                    finding_type="symptom",
+                    title="High Body Temperature",
+                    description="Confirmed high fever 39.0C",
+                    risk_level="high",
+                    confidence=0.95,
+                    recommendation="Urgent antipyretic administration",
+                )
+            ],
+        )
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec2)
+
+        # Must still be exactly 1 Finding row for this document
+        findings = self.db.query(Finding).filter(Finding.patient_id == self.patient_id).all()
+        assert len(findings) == 1
+        assert findings[0].description == "Confirmed high fever 39.0C"
+        assert findings[0].risk_level == "high"
+        assert findings[0].confidence == 0.95
+        assert findings[0].recommendation == "Urgent antipyretic administration"
+
+    def test_finding_different_documents_same_title(self):
+        doc2_id = uuid.uuid4()
+        doc2 = Document(
+            id=doc2_id,
+            patient_id=self.patient_id,
+            file_name="visit_aug20.pdf",
+            file_path="uploads/visit_aug20.pdf",
+            document_type="consultation_note",
+            processing_status="COMPLETED",
+        )
+        self.db.add(doc2)
+        self.db.commit()
+
+        # Document A finding
+        rec1 = ExtractedMedicalRecord(
+            summary="Visit Aug 16",
+            findings=[ExtractedFinding(title="High Body Temperature", description="Visit 1 fever")],
+        )
+        # Document B finding (different document, same finding title)
+        rec2 = ExtractedMedicalRecord(
+            summary="Visit Aug 20",
+            findings=[ExtractedFinding(title="High Body Temperature", description="Visit 2 fever")],
+        )
+
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec1)
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=doc2_id, extracted=rec2)
+
+        # Must be 2 distinct Finding rows, each associated with their respective source document
+        findings = self.db.query(Finding).filter(Finding.patient_id == self.patient_id).all()
+        assert len(findings) == 2
+        doc_map = {f.source_document_id: f.description for f in findings}
+        assert doc_map[self.document_id] == "Visit 1 fever"
+        assert doc_map[doc2_id] == "Visit 2 fever"
+
+    def test_finding_same_document_multiple_distinct_findings(self):
+        rec = ExtractedMedicalRecord(
+            summary="Multi-finding assessment",
+            findings=[
+                ExtractedFinding(title="High Body Temperature", description="Fever"),
+                ExtractedFinding(title="Dengue", description="Positive NS1 antigen"),
+                ExtractedFinding(title="Weakness", description="Generalized fatigue"),
+            ],
+        )
+
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec)
+
+        findings = self.db.query(Finding).filter(Finding.patient_id == self.patient_id).all()
+        assert len(findings) == 3
+        titles = {f.title for f in findings}
+        assert titles == {"High Body Temperature", "Dengue", "Weakness"}
+
+    def test_finding_duplicate_entries_in_single_payload(self):
+        # Payload containing identical finding titles twice
+        rec = ExtractedMedicalRecord(
+            summary="Duplicate findings payload",
+            findings=[
+                ExtractedFinding(title="High Body Temperature", description="First entry"),
+                ExtractedFinding(title="High Body Temperature", description="Second entry"),
+            ],
+        )
+
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec)
+
+        findings = self.db.query(Finding).filter(Finding.patient_id == self.patient_id).all()
+        assert len(findings) == 1
+        assert findings[0].title == "High Body Temperature"
+
+    def test_finding_legacy_null_source_document_id_handling(self):
+        # Historical finding row with source_document_id = NULL
+        legacy_finding = Finding(
+            patient_id=self.patient_id,
+            finding_type="diagnosis",
+            title="High Body Temperature",
+            description="Legacy finding without source_document_id",
+            source_document_id=None,
+        )
+        self.db.add(legacy_finding)
+        self.db.commit()
+
+        # Extract document — should create a new finding linked to this document without interfering with legacy row
+        rec = ExtractedMedicalRecord(
+            summary="New extraction",
+            findings=[ExtractedFinding(title="High Body Temperature", description="New finding with document_id")],
+        )
+
+        self.service.persist_extracted_record(db=self.db, patient_id=self.patient_id, document_id=self.document_id, extracted=rec)
+
+        findings = self.db.query(Finding).filter(Finding.patient_id == self.patient_id).all()
+        assert len(findings) == 2
+        null_docs = [f for f in findings if f.source_document_id is None]
+        linked_docs = [f for f in findings if f.source_document_id == self.document_id]
+        assert len(null_docs) == 1
+        assert len(linked_docs) == 1

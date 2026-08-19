@@ -861,7 +861,16 @@ function mapTimelineEvent(item: BackendMedicalEventResponse): TimelineEvent {
   if (typeLower.includes("prescript") || typeLower.includes("med")) kind = "prescription";
   else if (typeLower.includes("lab")) kind = "lab";
   else if (typeLower.includes("imag") || typeLower.includes("xray") || typeLower.includes("scan")) kind = "imaging";
-  else if (typeLower.includes("visit") || typeLower.includes("admiss") || typeLower.includes("consult")) kind = "visit";
+  else if (
+    typeLower.includes("visit") ||
+    typeLower.includes("admiss") ||
+    typeLower.includes("consult") ||
+    typeLower.includes("discharge") ||
+    typeLower.includes("procedure") ||
+    typeLower.includes("diagnosis")
+  ) {
+    kind = "visit";
+  }
 
   return {
     id: String(item.id),

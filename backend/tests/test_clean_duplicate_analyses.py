@@ -1,6 +1,7 @@
 import datetime
 import unittest
 import uuid
+from typing import cast
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -93,7 +94,7 @@ class CleanDuplicateAnalysesTestCase(unittest.TestCase):
         self.db.commit()
 
         # Run in dry_run mode
-        res = clean_duplicate_ai_analyses(db=self.db, patient_id=self.patient.id, dry_run=True)
+        res = clean_duplicate_ai_analyses(db=self.db, patient_id=cast(uuid.UUID, self.patient.id), dry_run=True)
         assert res["dry_run"] is True
         assert res["total_scanned"] == 3
         assert res["duplicates_identified"] == 2
@@ -140,7 +141,7 @@ class CleanDuplicateAnalysesTestCase(unittest.TestCase):
         self.db.add_all([a1, a2, b1, qa])
         self.db.commit()
 
-        res = clean_duplicate_ai_analyses(db=self.db, patient_id=self.patient.id, dry_run=False)
+        res = clean_duplicate_ai_analyses(db=self.db, patient_id=cast(uuid.UUID, self.patient.id), dry_run=False)
         assert res["dry_run"] is False
         assert res["records_deleted"] == 1
 

@@ -93,7 +93,10 @@ class Settings(BaseSettings):
     # OCR Settings
     TESSERACT_CMD: Optional[str] = Field(
         default=None,
-        description="Path to Tesseract executable (e.g. C:\\Program Files\\Tesseract-OCR\\tesseract.exe)",
+        description=(
+            "Path to Tesseract OCR executable (e.g. 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe' "
+            "for local Windows development or '/usr/bin/tesseract' for Linux/Render production)"
+        ),
     )
 
     # Environment

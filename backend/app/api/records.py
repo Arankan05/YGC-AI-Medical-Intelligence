@@ -303,10 +303,34 @@ def get_patient_analyses(
     db: Session = Depends(get_db),
 ) -> List[AIAnalysisRecordResponse]:
     patient = get_patient_for_user(current_user, db)
-    analyses = (
+    raw_analyses = (
         db.query(AIAnalysis)
         .filter(AIAnalysis.patient_id == patient.id)
         .order_by(AIAnalysis.created_at.desc())
         .all()
     )
-    return [AIAnalysisRecordResponse.model_validate(an) for an in analyses]
+
+    seen_document_ids: set[str] = set()
+    deduped_analyses: List[AIAnalysis] = []
+
+    for an in raw_analyses:
+        if an.analysis_type == "qa":
+            deduped_analyses.append(an)
+            continue
+
+        doc_id: Optional[str] = None
+        if isinstance(an.result, dict):
+            raw_doc_id = an.result.get("document_id")
+            if raw_doc_id:
+                doc_id = str(raw_doc_id)
+
+        if doc_id:
+            if doc_id in seen_document_ids:
+                continue
+            seen_document_ids.add(doc_id)
+            deduped_analyses.append(an)
+        else:
+            # Preserve legacy or unmapped extraction records without a document_id
+            deduped_analyses.append(an)
+
+    return [AIAnalysisRecordResponse.model_validate(an) for an in deduped_analyses]

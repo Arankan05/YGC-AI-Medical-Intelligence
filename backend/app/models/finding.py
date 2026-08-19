@@ -47,6 +47,12 @@ class Finding(Base):
         Text,
         nullable=True,
     )
+    source_document_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -61,6 +67,10 @@ class Finding(Base):
 
     # Relationships
     patient = relationship("Patient", back_populates="findings")
+    source_document = relationship(
+        "Document",
+        back_populates="findings",
+    )
     ai_analyses = relationship(
         "AIAnalysis",
         back_populates="finding",

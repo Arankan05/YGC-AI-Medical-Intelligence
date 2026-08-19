@@ -338,3 +338,101 @@ def test_timeline_dated_and_undated_events_filtering(client, mock_db_session, mo
     assert data[0]["event_date"] == "2026-08-01"
     assert data[1]["title"] == "Undated Consultation"
     assert data[1]["event_date"] is None
+
+
+def test_get_patient_analyses_deduplication_and_qa_isolation(client, mock_db_session, mock_user_and_patient):
+    user, patient = mock_user_and_patient
+    doc1_id = str(uuid.uuid4())
+    doc2_id = str(uuid.uuid4())
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    old_time = now - datetime.timedelta(hours=2)
+
+    # Document 1 - Old extraction
+    a1 = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="document_extraction",
+        result={"document_id": doc1_id, "summary": "Old Summary Doc 1"},
+        confidence=0.8,
+        created_at=old_time,
+    )
+    # Document 1 - Newer extraction (Duplicate)
+    a2 = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="document_extraction",
+        result={"document_id": doc1_id, "summary": "New Summary Doc 1"},
+        confidence=0.9,
+        created_at=now,
+    )
+
+    # Document 2 - Extraction
+    b1 = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="document_extraction",
+        result={"document_id": doc2_id, "summary": "Summary Doc 2"},
+        confidence=0.95,
+        created_at=now,
+    )
+
+    # Legacy Record (No document_id in result)
+    legacy = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="document_extraction",
+        result={"summary": "Legacy extraction without doc_id"},
+        confidence=0.75,
+        created_at=old_time,
+    )
+
+    # QA Records (3 distinct QA queries)
+    qa1 = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="qa",
+        result={"paragraphs": ["Answer 1"]},
+        confidence=0.9,
+        created_at=now,
+    )
+    qa2 = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="qa",
+        result={"paragraphs": ["Answer 2"]},
+        confidence=0.9,
+        created_at=now,
+    )
+    qa3 = AIAnalysis(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        analysis_type="qa",
+        result={"paragraphs": ["Answer 3"]},
+        confidence=0.9,
+        created_at=now,
+    )
+
+    # Query returns records sorted newest first
+    mock_db_session.query.return_value.filter.return_value.first.return_value = patient
+    mock_db_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        a2, b1, qa1, qa2, qa3, a1, legacy
+    ]
+
+    response = client.get("/api/records/analyses")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Total returned: a2 (Doc 1 latest), b1 (Doc 2), legacy (unmapped), qa1, qa2, qa3 = 6 total (a1 is hidden)
+    assert len(data) == 6
+
+    # Verify a1 (older duplicate of Doc 1) was omitted while a2 (newer) was kept
+    summaries = [d["result"]["summary"] for d in data if d["analysis_type"] == "document_extraction" and "summary" in d["result"]]
+    assert "New Summary Doc 1" in summaries
+    assert "Old Summary Doc 1" not in summaries
+    assert "Summary Doc 2" in summaries
+    assert "Legacy extraction without doc_id" in summaries
+
+    # Verify ALL 3 QA records were kept without deduplication
+    qa_records = [d for d in data if d["analysis_type"] == "qa"]
+    assert len(qa_records) == 3

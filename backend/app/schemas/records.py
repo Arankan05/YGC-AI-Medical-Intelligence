@@ -12,7 +12,7 @@ class MedicationRecordResponse(BaseModel):
 
     id: UUID = Field(..., description="Unique medication identifier")
     name: str = Field(..., description="Medication name")
-    normalized_name: str = Field(..., description="Normalized generic ingredient name")
+    normalized_name: Optional[str] = Field(default=None, description="Normalized generic ingredient name")
     dosage: Optional[str] = Field(default=None, description="Prescribed dosage strength")
     frequency: Optional[str] = Field(default=None, description="Dosing frequency")
     start_date: Optional[date] = Field(default=None, description="Start date")

@@ -84,6 +84,10 @@ class Document(Base):
         "Allergy",
         back_populates="source_document",
     )
+    findings = relationship(
+        "Finding",
+        back_populates="source_document",
+    )
 
     def __repr__(self) -> str:
         return f"<Document id={self.id} file_name={self.file_name} status={self.processing_status}>"

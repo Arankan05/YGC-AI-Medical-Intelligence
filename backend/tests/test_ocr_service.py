@@ -172,6 +172,33 @@ class OCRServiceTestCase(unittest.TestCase):
             pdf_bytes = create_in_memory_scanned_pdf(["Test text"])
             bad_service.extract_from_pdf(pdf_bytes)
 
+    def test_cross_platform_tesseract_cmd_configuration(self):
+        """Test that OCRService accepts Linux (/usr/bin/tesseract) and Windows paths without requiring host OS matches."""
+        import pytesseract
+        import os
+
+        # Test explicit Linux path configuration
+        linux_path = "/usr/bin/tesseract"
+        linux_service = OCRService(tesseract_cmd=linux_path)
+        self.assertEqual(pytesseract.pytesseract.tesseract_cmd, linux_path)
+
+        # Test explicit Windows path configuration
+        win_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        win_service = OCRService(tesseract_cmd=win_path)
+        self.assertEqual(pytesseract.pytesseract.tesseract_cmd, win_path)
+
+        # Test environment variable resolution
+        old_env = os.environ.get("TESSERACT_CMD")
+        try:
+            os.environ["TESSERACT_CMD"] = "/usr/local/bin/tesseract"
+            env_service = OCRService()
+            self.assertEqual(pytesseract.pytesseract.tesseract_cmd, "/usr/local/bin/tesseract")
+        finally:
+            if old_env is not None:
+                os.environ["TESSERACT_CMD"] = old_env
+            else:
+                os.environ.pop("TESSERACT_CMD", None)
+
 
 if __name__ == "__main__":
     unittest.main()

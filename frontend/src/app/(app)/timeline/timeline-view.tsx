@@ -26,7 +26,6 @@ const CHIPS: FilterChip[] = [
   { value: "prescription", label: "Prescriptions" },
   { value: "lab", label: "Lab results" },
   { value: "note", label: "Doctor notes" },
-  { value: "allergy", label: "Allergies" },
   { value: "visit", label: "Consultations & visits" },
 ];
 
