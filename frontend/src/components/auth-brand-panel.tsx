@@ -28,7 +28,7 @@ const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
 export function AuthBrandPanel() {
   return (
     <div
-      className="relative hidden h-full w-[560px] shrink-0 flex-col justify-between overflow-hidden p-[52px] lg:flex"
+      className="sticky top-0 hidden h-dvh w-[460px] xl:w-[560px] shrink-0 flex-col justify-between overflow-hidden p-8 xl:p-[52px] lg:flex"
       style={{
         backgroundImage:
           "linear-gradient(117.66deg, #fdfdff 0%, #dfdcfa 39.007%, #a9b2e8 70.922%)",

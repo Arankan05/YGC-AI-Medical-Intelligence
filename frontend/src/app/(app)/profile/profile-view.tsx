@@ -7,6 +7,7 @@ import {
   Download,
   Loader2,
   LogIn,
+  LogOut,
   Pill,
   ShieldAlert,
   Sparkles,
@@ -55,6 +56,19 @@ export function ProfileView() {
   );
   const [danger, setDanger] = useState<DangerAction>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await api().signOut();
+    } catch (err) {
+      console.error("Sign out error:", err);
+    } finally {
+      window.location.href = "/sign-in";
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -256,14 +270,30 @@ export function ProfileView() {
                 </span>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="px-4 py-2"
-              onClick={() => setEditing(true)}
-            >
-              Edit Profile Info
-            </Button>
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-4 py-2"
+                onClick={() => setEditing(true)}
+              >
+                Edit Profile Info
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-risk-high-border text-risk-high hover:bg-risk-high-bg px-4 py-2"
+                disabled={signingOut}
+                onClick={handleSignOut}
+              >
+                {signingOut ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <LogOut className="size-4" strokeWidth={1.8} />
+                )}
+                Sign Out
+              </Button>
+            </div>
           </div>
 
           <dl className="grid grid-cols-1 gap-4 border-t border-neutral-100 pt-4 sm:grid-cols-2 lg:grid-cols-3">

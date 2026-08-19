@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, Mail } from "lucide-react";
 
 import { Field, fieldInputClass } from "@/components/field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { api, toErrorMessage } from "@/lib/api";
+import { getAccessToken } from "@/lib/supabase";
 
 type FieldErrors = {
   fullName?: string;
@@ -27,10 +29,25 @@ export function SignUpForm() {
   const [acknowledged, setAcknowledged] = useState(true);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmationNotice, setConfirmationNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getAccessToken().then((token) => {
+      if (active && token) {
+        router.replace("/dashboard");
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
+
     const nextErrors: FieldErrors = {};
     if (!fullName.trim()) nextErrors.fullName = "Enter your full name.";
     if (!email.trim()) nextErrors.email = "Enter your email address.";
@@ -46,6 +63,7 @@ export function SignUpForm() {
 
     setErrors(nextErrors);
     setFormError(null);
+    setConfirmationNotice(null);
     if (Object.keys(nextErrors).length > 0) return;
 
     setSubmitting(true);
@@ -56,12 +74,38 @@ export function SignUpForm() {
         password,
         acknowledgedDisclaimer: acknowledged,
       });
-      router.push("/welcome");
+      router.push("/dashboard");
     } catch (error) {
-      setFormError(toErrorMessage(error));
+      const msg = toErrorMessage(error);
+      if (msg.toLowerCase().includes("confirm your account") || msg.toLowerCase().includes("check your email")) {
+        setConfirmationNotice("Account created successfully! Please check your email inbox to confirm your account before signing in.");
+      } else {
+        setFormError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (confirmationNotice) {
+    return (
+      <div className="flex w-full max-w-[380px] flex-col gap-5 rounded-xl border border-brand-200 bg-brand-50/50 p-6">
+        <div className="flex size-12 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+          <Mail className="size-6" strokeWidth={1.8} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xl font-bold tracking-tight text-neutral-900">
+            Check your email
+          </h2>
+          <p className="text-sm leading-6 text-neutral-600">
+            {confirmationNotice}
+          </p>
+        </div>
+        <Button render={<Link href="/sign-in" />} className="w-full">
+          Return to Sign in
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -157,12 +201,13 @@ export function SignUpForm() {
       </div>
 
       {formError && (
-        <p
+        <div
           role="alert"
-          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex w-full items-start gap-2.5 rounded-lg border border-risk-high-border bg-risk-high-bg p-3.5 text-[13px] leading-[19px] text-risk-high"
         >
-          {formError}
-        </p>
+          <AlertCircle className="size-4 shrink-0 mt-0.5" strokeWidth={1.8} />
+          <span className="flex-1 font-medium">{formError}</span>
+        </div>
       )}
 
       <Button type="submit" size="lg" disabled={submitting} className="w-full">

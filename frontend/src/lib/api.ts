@@ -98,6 +98,8 @@ export interface MediGuardianApi {
   signIn(input: SignInInput): Promise<void>;
   signUp(input: SignUpInput): Promise<void>;
   signOut(): Promise<void>;
+  resetPasswordForEmail(email: string, redirectTo?: string): Promise<void>;
+  resetPassword(newPassword: string): Promise<void>;
 
   listDocuments(): Promise<MedicalDocument[]>;
   uploadDocument(
@@ -1093,6 +1095,36 @@ const defaultApiImplementation: MediGuardianApi = {
     }
   },
 
+  async resetPasswordForEmail(
+    email: string,
+    redirectTo?: string
+  ): Promise<void> {
+    const sb = getSupabase();
+    const envAppUrl =
+      process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL;
+    const baseUrl =
+      envAppUrl ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+    const targetUrl =
+      redirectTo || `${baseUrl.replace(/\/+$/, "")}/reset-password`;
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: targetUrl,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+  },
+
+  async resetPassword(newPassword: string): Promise<void> {
+    const sb = getSupabase();
+    const { error } = await sb.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+  },
+
   async listDocuments(): Promise<MedicalDocument[]> {
     const res = await authFetch("/api/documents", { method: "GET" });
     if (res.status === 401) {
@@ -1723,6 +1755,16 @@ export function isApiConfigured() {
 
 export function toErrorMessage(error: unknown) {
   if (error instanceof ApiNotConfiguredError) return error.message;
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    const msg = error.message;
+    if (
+      msg.toLowerCase().includes("invalid login credentials") ||
+      msg.toLowerCase().includes("invalid_grant") ||
+      msg.toLowerCase().includes("user_not_found")
+    ) {
+      return "Invalid email or password. Please check your credentials and try again.";
+    }
+    return msg;
+  }
   return "Something went wrong. Please try again.";
 }

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 
 import { Field, fieldInputClass } from "@/components/field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { api, toErrorMessage } from "@/lib/api";
+import { getAccessToken } from "@/lib/supabase";
 
 /** Figma: 01 · Sign In — form-panel (node 15:43). */
 export function SignInForm() {
@@ -21,8 +22,22 @@ export function SignInForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    getAccessToken().then((token) => {
+      if (active && token) {
+        router.replace("/dashboard");
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
+
     const nextErrors: typeof errors = {};
     if (!email.trim()) nextErrors.email = "Enter your email address.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
@@ -111,7 +126,7 @@ export function SignInForm() {
           </span>
         </label>
         <Link
-          href="/sign-in"
+          href="/forgot-password"
           className="text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
         >
           Forgot password?
@@ -119,12 +134,13 @@ export function SignInForm() {
       </div>
 
       {formError && (
-        <p
+        <div
           role="alert"
-          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex w-full items-start gap-2.5 rounded-lg border border-risk-high-border bg-risk-high-bg p-3.5 text-[13px] leading-[19px] text-risk-high"
         >
-          {formError}
-        </p>
+          <AlertCircle className="size-4 shrink-0 mt-0.5" strokeWidth={1.8} />
+          <span className="flex-1 font-medium">{formError}</span>
+        </div>
       )}
 
       <Button type="submit" size="lg" disabled={submitting} className="w-full">
