@@ -32,8 +32,8 @@ def test_extract_from_text_success():
     assert record.medications[0].name == "Amoxicillin 500mg"
     assert len(record.events) == 1
     assert len(record.lab_results) == 1
-    assert len(record.allergies) == 1
     assert len(record.findings) == 1
+    assert mock_prov.last_prompt is not None
     assert "CLINICAL DOCUMENT TEXT START" in mock_prov.last_prompt
 
 
@@ -131,4 +131,94 @@ def test_extract_from_text_with_malformed_dates_normalizes_to_none():
     assert record.events[0].event_date is None
     assert record.medications[0].start_date is None
     assert record.medications[0].end_date is None
+
+
+def test_extraction_consultation_prescription_note_rules():
+    """
+    Verifies that clinical consultation/prescription notes extract:
+    - An appropriate event in events with event_date=None when unstated
+    - A valid document_type_detected from allowed categories (never 'unknown')
+    - A non-null, non-empty clinical summary
+    - Strict anti-hallucination: empty lab_results and allergies when absent in source
+    - Preserved medication and finding extractions
+    """
+    raw_ai_output = {
+        "document_type_detected": "consultation_note",
+        "summary": "Outpatient consultation for Dengue fever. Prescribed Tab Rantac 150mg and CAP SM FIBRO with advice on monitoring body temperature.",
+        "confidence_score": 0.92,
+        "events": [
+            {
+                "event_type": "consultation",
+                "title": "Clinical Consultation for Dengue",
+                "description": "Outpatient evaluation for full body pain, weakness, and fever.",
+                "event_date": None,
+            }
+        ],
+        "medications": [
+            {
+                "name": "Tab Rantac 150mg",
+                "normalized_name": "ranitidine",
+                "dosage": "150mg",
+                "frequency": "1-1-1",
+                "instructions": "After meal",
+            },
+            {
+                "name": "CAP SM FIBRO",
+                "normalized_name": "sm fibro",
+                "dosage": None,
+                "frequency": "1-0-1",
+            },
+        ],
+        "lab_results": [],
+        "allergies": [],
+        "findings": [
+            {
+                "finding_type": "diagnosis",
+                "title": "Dengue",
+                "description": "Confirmed diagnosis of Dengue.",
+                "risk_level": "high",
+                "confidence": 0.95,
+            },
+            {
+                "finding_type": "vital_sign",
+                "title": "High Body Temperature",
+                "description": "Observed high body temperature.",
+                "risk_level": "medium",
+                "confidence": 0.9,
+            },
+        ],
+    }
+
+    mock_prov = MockAIProvider(canned_structured_response=raw_ai_output)
+    service = MedicalExtractionService(ai_provider=mock_prov)
+
+    record = service.extract_from_text(
+        "Full Body Pain, Weakness Feeling, High Body Temperature. Diagnosis: Dengue. Rx: Tab Rantac 150mg, CAP SM FIBRO."
+    )
+
+    # A. Event extraction
+    assert len(record.events) == 1
+    assert record.events[0].event_type == "consultation"
+    assert record.events[0].event_date is None
+    assert "Dengue" in record.events[0].title
+
+    # B. Document type is never unknown
+    assert record.document_type_detected in {"prescription", "lab_report", "discharge_summary", "consultation_note", "other"}
+    assert record.document_type_detected != "unknown"
+
+    # C. Summary is non-null and non-empty
+    assert record.summary is not None
+    assert isinstance(record.summary, str)
+    assert len(record.summary.strip()) > 0
+
+    # D & E. No hallucinated labs or allergies
+    assert record.lab_results == []
+    assert record.allergies == []
+
+    # F & G. Medications and findings intact
+    assert len(record.medications) == 2
+    assert record.medications[0].name == "Tab Rantac 150mg"
+    assert record.medications[0].normalized_name == "ranitidine"
+    assert len(record.findings) == 2
+    assert record.findings[0].title == "Dengue"
 

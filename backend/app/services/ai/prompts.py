@@ -18,10 +18,11 @@ Follow these strict clinical rules:
    - `start_date` / `end_date`: Complete date in 'YYYY-MM-DD' format if explicitly present, otherwise null. Never invent missing date parts.
    - `instructions`: Patient instructions or warning notes (e.g., 'take with full glass of water').
 4. **Medical Events**:
+   - When the source document represents a clinical encounter, consultation, diagnosis encounter, outpatient visit, or prescription/doctor note, create an appropriate MedicalEvent even when the exact encounter date is not explicitly present.
    - `event_type`: 'consultation', 'lab_test', 'diagnosis', 'procedure', 'admission', 'discharge', or 'prescription'.
-   - `event_date`: Complete date in 'YYYY-MM-DD' format if identifiable, otherwise null. Never guess missing date parts.
-   - `title`: Short event title (e.g., 'Cardiology Consultation', 'Routine Blood Test', 'Appendectomy').
-   - `description`: Contextual details about the visit or event.
+   - `event_date`: Complete date in 'YYYY-MM-DD' format if explicitly present in the document; if NOT explicitly present, set event_date to null. NEVER guess, invent, or extrapolate missing dates.
+   - `title`: Short event title based strictly on information present (e.g., 'Clinical Consultation for Dengue', 'Outpatient Prescription Visit', 'Cardiology Consultation').
+   - `description`: Contextual details about the visit, assessment, or event from the document.
 5. **Lab Results**:
    - `test_name`: Name of the test/panel parameter (e.g., 'Fasting Blood Glucose', 'Hemoglobin A1c', 'Serum Creatinine', 'WBC').
    - `value`: Measured numerical or qualitative value (e.g., '142', '6.5', '1.1', 'Negative').
@@ -41,8 +42,14 @@ Follow these strict clinical rules:
    - `confidence`: Confidence score between 0.0 and 1.0 (default 0.9).
    - `recommendation`: Recommended clinical action, lifestyle advice, or referral.
 8. **Document Summary & Type**:
-   - `document_type_detected`: 'prescription', 'lab_report', 'discharge_summary', 'consultation_note', or 'other'.
-   - `summary`: 2-3 sentence clinical summary of the document.
+   - `document_type_detected`: MUST be one of 'prescription', 'lab_report', 'discharge_summary', 'consultation_note', or 'other'. Do NOT use 'unknown'.
+     - Primary content is medication prescriptions/instructions → 'prescription'
+     - Primary content is laboratory measurements/results → 'lab_report'
+     - Describes hospital discharge → 'discharge_summary'
+     - Describes clinical consultation/doctor assessment/diagnosis → 'consultation_note'
+     - If none of the above can reasonably be determined → 'other'
+     - Choose the dominant purpose for mixed documents; do not return 'unknown'.
+   - `summary`: MUST ALWAYS be a concise 1-2 sentence clinical summary describing the document's main purpose, key findings, diagnoses, or prescribed medications based strictly on the text. Never fabricate information.
    - `confidence_score`: Overall extraction confidence between 0.0 and 1.0.
 
 Your response MUST BE valid JSON adhering to the exact JSON schema provided. Return pure JSON only, without markdown formatting or introductory commentary.
@@ -51,7 +58,10 @@ Your response MUST BE valid JSON adhering to the exact JSON schema provided. Ret
 EXTRACTION_JSON_SCHEMA_DESCRIPTION = {
     "type": "object",
     "properties": {
-        "document_type_detected": {"type": "string"},
+        "document_type_detected": {
+            "type": "string",
+            "enum": ["prescription", "lab_report", "discharge_summary", "consultation_note", "other"],
+        },
         "summary": {"type": "string"},
         "confidence_score": {"type": "number"},
         "events": {

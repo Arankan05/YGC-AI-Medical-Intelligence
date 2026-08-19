@@ -148,20 +148,44 @@ class MedicalPersistenceService:
                 db.add(finding_record)
                 counts["findings"] += 1
 
-            # 6. Persist AI Analysis Record
-            analysis_record = AIAnalysis(
-                patient_id=patient_id,
-                analysis_type="document_extraction",
-                result={
-                    "summary": extracted.summary,
-                    "document_type_detected": extracted.document_type_detected,
-                    "confidence_score": extracted.confidence_score,
-                    "persisted_counts": counts,
-                },
-                confidence=extracted.confidence_score,
+            # 6. Persist or Update AI Analysis Record (Idempotent per document)
+            str_doc_id = str(document_id)
+            result_payload = {
+                "document_id": str_doc_id,
+                "summary": extracted.summary,
+                "document_type_detected": extracted.document_type_detected,
+                "confidence_score": extracted.confidence_score,
+                "persisted_counts": counts,
+            }
+
+            existing_analyses = (
+                db.query(AIAnalysis)
+                .filter(
+                    AIAnalysis.patient_id == patient_id,
+                    AIAnalysis.analysis_type == "document_extraction",
+                )
+                .all()
             )
-            db.add(analysis_record)
-            counts["ai_analyses"] += 1
+
+            existing_analysis = None
+            for an in existing_analyses:
+                if isinstance(an.result, dict) and an.result.get("document_id") == str_doc_id:
+                    existing_analysis = an
+                    break
+
+            if existing_analysis:
+                existing_analysis.result = result_payload
+                existing_analysis.confidence = extracted.confidence_score
+                counts["ai_analyses"] += 1
+            else:
+                analysis_record = AIAnalysis(
+                    patient_id=patient_id,
+                    analysis_type="document_extraction",
+                    result=result_payload,
+                    confidence=extracted.confidence_score,
+                )
+                db.add(analysis_record)
+                counts["ai_analyses"] += 1
 
             db.commit()
             logger.info(

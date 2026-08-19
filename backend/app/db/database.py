@@ -1,22 +1,19 @@
 import os
 from pathlib import Path
-from typing import Generator
-from urllib.parse import quote_plus, unquote
-
+from typing import Any, Generator
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-
 # Explicitly load .env from backend directory
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 ENV_FILE = BASE_DIR / ".env"
 load_dotenv(dotenv_path=ENV_FILE)
 
-
 def _get_database_url() -> str:
     """
     Retrieve and format PostgreSQL connection URL from environment variables.
-    Configured for SQLAlchemy 2.0 with the psycopg (v3) driver.
+    Configured for SQLAlchemy 2.0 with the psycopg (v3) driver using robust URL parsing.
     """
     raw_url = os.getenv("DATABASE_URL")
     if not raw_url or not raw_url.strip():
@@ -25,27 +22,30 @@ def _get_database_url() -> str:
             "Please ensure it is defined in backend/.env."
         )
 
-    url = raw_url.strip()
+    url_str = raw_url.strip()
+
+    # SQLite compatibility for testing
+    if url_str.startswith("sqlite"):
+        return url_str
 
     # Normalize legacy postgres:// scheme to postgresql://
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+    if url_str.startswith("postgres://"):
+        url_str = "postgresql://" + url_str[len("postgres://"):]
 
     # Specify psycopg (v3) driver for SQLAlchemy
-    if url.startswith("postgresql://"):
-        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url_str.startswith("postgresql://"):
+        url_str = "postgresql+psycopg://" + url_str[len("postgresql://"):]
 
-    # Handle unencoded special characters (e.g. '@') in passwords safely
-    if url.count("@") > 1:
-        scheme_and_auth, host_and_db = url.rsplit("@", 1)
-        if "://" in scheme_and_auth:
-            scheme, auth = scheme_and_auth.split("://", 1)
-            if ":" in auth:
-                username, password = auth.split(":", 1)
-                encoded_password = quote_plus(unquote(password))
-                url = f"{scheme}://{username}:{encoded_password}@{host_and_db}"
+    # Parse URL robustly using SQLAlchemy URL utilities
+    parsed_url = make_url(url_str)
 
-    return url
+    # Ensure sslmode=require parameter is present for non-SQLite PostgreSQL connections
+    query_dict = dict(parsed_url.query)
+    if "sslmode" not in query_dict:
+        query_dict["sslmode"] = "require"
+        parsed_url = parsed_url.set(query=query_dict)
+
+    return parsed_url.render_as_string(hide_password=False)
 
 
 # Retrieve sanitized database URL
@@ -55,15 +55,15 @@ DATABASE_URL = _get_database_url()
 # Configure connection pool settings for PostgreSQL/Supabase while preserving SQLite compatibility
 is_sqlite = DATABASE_URL.startswith("sqlite")
 
-engine_kwargs = {
+engine_kwargs: dict[str, Any] = {
     "pool_pre_ping": True,
 }
 
 if not is_sqlite:
     engine_kwargs.update(
         {
-            "pool_size": 20,
-            "max_overflow": 20,
+            "pool_size": 5,
+            "max_overflow": 10,
             "pool_timeout": 30,
             "pool_recycle": 300,
         }

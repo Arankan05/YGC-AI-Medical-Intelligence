@@ -268,3 +268,121 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
         assert db_labs[0].result_date is None
         assert db_labs[0].document_id == self.doc_a.id
 
+    def test_extract_endpoint_re_extraction_is_idempotent(self):
+        # 1. First extraction call
+        resp1 = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
+        assert resp1.status_code == 200
+
+        # 2. Query /api/records/analyses -> Expect 1 record
+        analyses_resp1 = self.client.get("/api/records/analyses")
+        assert analyses_resp1.status_code == 200
+        analyses_data1 = analyses_resp1.json()
+        assert len(analyses_data1) == 1
+        assert analyses_data1[0]["result"]["document_id"] == str(self.doc_a.id)
+
+        # 3. Trigger extraction AGAIN for same document
+        resp2 = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
+        assert resp2.status_code == 200
+
+        # 4. Query /api/records/analyses AGAIN -> Expect STILL 1 record!
+        analyses_resp2 = self.client.get("/api/records/analyses")
+        assert analyses_resp2.status_code == 200
+        analyses_data2 = analyses_resp2.json()
+        assert len(analyses_data2) == 1  # No duplicate row created!
+        assert analyses_data2[0]["result"]["document_id"] == str(self.doc_a.id)
+
+    def test_extract_synthetic_lab_report_pipeline_and_api(self):
+        # Configure mock AI to return synthetic lab report entities
+        self.mock_ai.canned_structured_response = {
+            "document_type_detected": "lab_report",
+            "summary": "Synthetic lab report showing elevated Fasting Blood Glucose.",
+            "confidence_score": 0.96,
+            "events": [
+                {
+                    "event_type": "lab_test",
+                    "title": "Comprehensive Metabolic Panel",
+                    "description": "Routine blood chemistry evaluation.",
+                    "event_date": "2026-08-10",
+                }
+            ],
+            "medications": [],
+            "lab_results": [
+                {
+                    "test_name": "Fasting Blood Glucose",
+                    "value": "135",
+                    "unit": "mg/dL",
+                    "reference_range": "70-99 mg/dL",
+                    "result_date": "2026-08-10",
+                },
+                {
+                    "test_name": "Hemoglobin A1c",
+                    "value": "6.4",
+                    "unit": "%",
+                    "reference_range": "< 5.7%",
+                    "result_date": "2026-08-10",
+                },
+            ],
+            "allergies": [],
+            "findings": [
+                {
+                    "finding_type": "vital_sign",
+                    "title": "Elevated Blood Glucose",
+                    "description": "Fasting glucose measured at 135 mg/dL.",
+                    "risk_level": "medium",
+                    "confidence": 0.95,
+                }
+            ],
+        }
+
+        # 1. Post to extract endpoint
+        extract_resp = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
+        assert extract_resp.status_code == 200
+
+        # 2. Query /api/records/lab-results API
+        lab_resp = self.client.get("/api/records/lab-results")
+        assert lab_resp.status_code == 200
+        labs = lab_resp.json()
+        assert len(labs) == 2
+        assert labs[0]["test_name"] in ["Fasting Blood Glucose", "Hemoglobin A1c"]
+        assert labs[0]["source_document_id"] == str(self.doc_a.id)
+
+    def test_extract_synthetic_allergy_report_pipeline_and_api(self):
+        # Configure mock AI to return synthetic allergy document entities
+        self.mock_ai.canned_structured_response = {
+            "document_type_detected": "consultation_note",
+            "summary": "Patient clinical consultation noting documented severe allergy to Penicillin.",
+            "confidence_score": 0.94,
+            "events": [
+                {
+                    "event_type": "consultation",
+                    "title": "Allergy Evaluation Visit",
+                    "description": "Consultation regarding drug allergy history.",
+                    "event_date": None,
+                }
+            ],
+            "medications": [],
+            "lab_results": [],
+            "allergies": [
+                {
+                    "medication_name": "Penicillin V",
+                    "normalized_medication_name": "penicillin v",
+                    "reaction": "Anaphylactic hives and shortness of breath",
+                    "severity": "severe",
+                }
+            ],
+            "findings": [],
+        }
+
+        # 1. Post to extract endpoint
+        extract_resp = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
+        assert extract_resp.status_code == 200
+
+        # 2. Query /api/records/allergies API
+        allergies_resp = self.client.get("/api/records/allergies")
+        assert allergies_resp.status_code == 200
+        allergies = allergies_resp.json()
+        assert len(allergies) == 1
+        assert allergies[0]["medication_name"] == "Penicillin V"
+        assert allergies[0]["severity"] == "severe"
+        assert allergies[0]["source_document_id"] == str(self.doc_a.id)
+

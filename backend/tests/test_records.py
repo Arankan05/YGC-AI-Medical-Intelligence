@@ -300,4 +300,41 @@ def test_records_patient_isolation_enforced(client, mock_db_session):
     data = response.json()
     assert len(data) == 1
     assert data[0]["medication_name"] == "Amoxicillin"
-    # Ensure patient_id is not exposed or leaked across tenants
+
+
+def test_timeline_dated_and_undated_events_filtering(client, mock_db_session, mock_user_and_patient):
+    user, patient = mock_user_and_patient
+    doc = Document(id=uuid.uuid4(), file_name="consultation.pdf")
+    now_dt = datetime.datetime.now(datetime.timezone.utc)
+    ev1 = MedicalEvent(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        event_type="consultation",
+        event_date=datetime.date(2026, 8, 1),
+        title="Dated Consultation",
+        description="Dated visit description",
+        document=doc,
+        created_at=now_dt,
+    )
+    ev2 = MedicalEvent(
+        id=uuid.uuid4(),
+        patient_id=patient.id,
+        event_type="consultation",
+        event_date=None,
+        title="Undated Consultation",
+        description="Undated visit description",
+        document=doc,
+        created_at=now_dt,
+    )
+
+    mock_db_session.query.return_value.filter.return_value.first.return_value = patient
+    mock_db_session.query.return_value.options.return_value.filter.return_value.order_by.return_value.all.return_value = [ev1, ev2]
+
+    response = client.get("/api/records/timeline")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["title"] == "Dated Consultation"
+    assert data[0]["event_date"] == "2026-08-01"
+    assert data[1]["title"] == "Undated Consultation"
+    assert data[1]["event_date"] is None

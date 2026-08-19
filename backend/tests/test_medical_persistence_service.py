@@ -58,16 +58,18 @@ class MedicalPersistenceServiceTestCase(unittest.TestCase):
         self.db.add(self.user)
         self.db.commit()
 
+        self.patient_id: uuid.UUID = uuid.uuid4()
         self.patient = Patient(
-            id=uuid.uuid4(),
+            id=self.patient_id,
             user_id=self.user.id,
         )
         self.db.add(self.patient)
         self.db.commit()
 
+        self.document_id: uuid.UUID = uuid.uuid4()
         self.document = Document(
-            id=uuid.uuid4(),
-            patient_id=self.patient.id,
+            id=self.document_id,
+            patient_id=self.patient_id,
             file_name="prescription.pdf",
             file_path="uploads/prescription.pdf",
             document_type="prescription",
@@ -144,8 +146,8 @@ class MedicalPersistenceServiceTestCase(unittest.TestCase):
 
         counts = self.service.persist_extracted_record(
             db=self.db,
-            patient_id=self.patient.id,
-            document_id=self.document.id,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
             extracted=extracted,
         )
 
@@ -201,8 +203,8 @@ class MedicalPersistenceServiceTestCase(unittest.TestCase):
         )
         self.service.persist_extracted_record(
             db=self.db,
-            patient_id=self.patient.id,
-            document_id=self.document.id,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
             extracted=rec1,
         )
 
@@ -220,8 +222,8 @@ class MedicalPersistenceServiceTestCase(unittest.TestCase):
         )
         self.service.persist_extracted_record(
             db=self.db,
-            patient_id=self.patient.id,
-            document_id=self.document.id,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
             extracted=rec2,
         )
 
@@ -232,3 +234,226 @@ class MedicalPersistenceServiceTestCase(unittest.TestCase):
         assert len(prescs_after) == 2  # But 2 distinct prescriptions created!
         assert prescs_after[0].medication_id == meds_after[0].id
         assert prescs_after[1].medication_id == meds_after[0].id
+
+    def test_ai_analysis_extraction_idempotency_same_document(self):
+        # A. First extraction creates one AIAnalysis
+        rec1 = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="First summary of document A",
+            confidence_score=0.85,
+        )
+        counts1 = self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec1,
+        )
+        assert counts1["ai_analyses"] == 1
+
+        analyses_1 = (
+            self.db.query(AIAnalysis)
+            .filter(
+                AIAnalysis.patient_id == self.patient.id,
+                AIAnalysis.analysis_type == "document_extraction",
+            )
+            .all()
+        )
+        assert len(analyses_1) == 1
+        assert analyses_1[0].result.get("summary") == "First summary of document A"
+        assert analyses_1[0].result.get("document_id") == str(self.document.id)
+
+        # B & D. Second extraction for SAME document does NOT create another AIAnalysis & updates result
+        rec2 = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="Updated second summary of document A",
+            confidence_score=0.92,
+        )
+        counts2 = self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec2,
+        )
+        assert counts2["ai_analyses"] == 1
+
+        analyses_2 = (
+            self.db.query(AIAnalysis)
+            .filter(
+                AIAnalysis.patient_id == self.patient.id,
+                AIAnalysis.analysis_type == "document_extraction",
+            )
+            .all()
+        )
+        assert len(analyses_2) == 1  # Still exactly 1 row!
+        assert analyses_2[0].result.get("summary") == "Updated second summary of document A"
+        assert analyses_2[0].confidence == 0.92
+
+        # C. Third extraction still leaves exactly one document_extraction analysis
+        rec3 = ExtractedMedicalRecord(
+            document_type_detected="consultation_note",
+            summary="Third summary of document A",
+            confidence_score=0.95,
+        )
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec3,
+        )
+        analyses_3 = (
+            self.db.query(AIAnalysis)
+            .filter(
+                AIAnalysis.patient_id == self.patient.id,
+                AIAnalysis.analysis_type == "document_extraction",
+            )
+            .all()
+        )
+        assert len(analyses_3) == 1  # Still exactly 1 row!
+        assert analyses_3[0].result.get("summary") == "Third summary of document A"
+
+    def test_ai_analysis_separate_documents_and_patients(self):
+        # E. Two DIFFERENT documents for SAME patient create TWO separate document_extraction analyses
+        doc_b = Document(
+            id=uuid.uuid4(),
+            patient_id=self.patient.id,
+            file_name="lab_report.pdf",
+            file_path="uploads/lab_report.pdf",
+            document_type="lab_report",
+            processing_status="COMPLETED",
+            extracted_text="Lab report text",
+        )
+        self.db.add(doc_b)
+        self.db.commit()
+
+        rec_a = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="Summary for Doc A",
+            confidence_score=0.88,
+        )
+        rec_b = ExtractedMedicalRecord(
+            document_type_detected="lab_report",
+            summary="Summary for Doc B",
+            confidence_score=0.91,
+        )
+
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec_a,
+        )
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=uuid.UUID(str(doc_b.id)),
+            extracted=rec_b,
+        )
+
+        patient_analyses = (
+            self.db.query(AIAnalysis)
+            .filter(
+                AIAnalysis.patient_id == self.patient.id,
+                AIAnalysis.analysis_type == "document_extraction",
+            )
+            .all()
+        )
+        assert len(patient_analyses) == 2  # Doc A -> 1, Doc B -> 1 => Total 2
+
+        # F. Different patients remain isolated
+        user_other = User(id=uuid.uuid4(), email="other_patient@example.com")
+        patient_other_id = uuid.uuid4()
+        doc_other_id = uuid.uuid4()
+        patient_other = Patient(id=patient_other_id, user_id=user_other.id)
+        doc_other = Document(
+            id=doc_other_id,
+            patient_id=patient_other_id,
+            file_name="other_doc.pdf",
+            file_path="uploads/other_doc.pdf",
+            document_type="other",
+            processing_status="COMPLETED",
+        )
+        self.db.add_all([user_other, patient_other, doc_other])
+        self.db.commit()
+
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=patient_other_id,
+            document_id=doc_other_id,
+            extracted=rec_a,
+        )
+
+        other_analyses = (
+            self.db.query(AIAnalysis)
+            .filter(AIAnalysis.patient_id == patient_other_id)
+            .all()
+        )
+        assert len(other_analyses) == 1
+        assert other_analyses[0].result.get("document_id") == str(doc_other_id)
+
+    def test_ai_analysis_qa_not_deduplicated(self):
+        # G. QA analyses are NOT deduplicated
+        qa_analysis_1 = AIAnalysis(
+            patient_id=self.patient.id,
+            analysis_type="qa",
+            result={"paragraphs": ["Answer 1"]},
+            confidence=0.95,
+        )
+        qa_analysis_2 = AIAnalysis(
+            patient_id=self.patient.id,
+            analysis_type="qa",
+            result={"paragraphs": ["Answer 2"]},
+            confidence=0.95,
+        )
+        self.db.add_all([qa_analysis_1, qa_analysis_2])
+        self.db.commit()
+
+        rec_doc = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="Doc summary",
+            confidence_score=0.9,
+        )
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec_doc,
+        )
+
+        all_patient_analyses = (
+            self.db.query(AIAnalysis)
+            .filter(AIAnalysis.patient_id == self.patient.id)
+            .all()
+        )
+        # 2 QA analyses + 1 document extraction = 3 total AIAnalysis rows
+        assert len(all_patient_analyses) == 3
+
+    def test_legacy_ai_analysis_without_document_id_handling(self):
+        # Legacy AIAnalysis record without document_id in result dictionary
+        legacy_analysis = AIAnalysis(
+            patient_id=self.patient.id,
+            analysis_type="document_extraction",
+            result={"summary": "Legacy extraction without document_id", "persisted_counts": {}},
+            confidence=0.8,
+        )
+        self.db.add(legacy_analysis)
+        self.db.commit()
+
+        # Re-extract document - should not crash on legacy record, and creates canonical record with document_id
+        rec = ExtractedMedicalRecord(
+            document_type_detected="prescription",
+            summary="New extraction summary",
+            confidence_score=0.9,
+        )
+        self.service.persist_extracted_record(
+            db=self.db,
+            patient_id=self.patient_id,
+            document_id=self.document_id,
+            extracted=rec,
+        )
+
+        all_analyses = (
+            self.db.query(AIAnalysis)
+            .filter(AIAnalysis.patient_id == self.patient.id)
+            .all()
+        )
+        assert len(all_analyses) == 2
