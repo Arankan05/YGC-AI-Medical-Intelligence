@@ -1,3 +1,4 @@
+
 import logging
 import re
 import uuid
@@ -7,6 +8,7 @@ from uuid import UUID
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -680,11 +682,13 @@ def process_document_endpoint(
 @router.post(
     "/{document_id}/extract",
     response_model=MedicalExtractionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Extract structured medical intelligence from document",
-    description="Extracts structured clinical data (events, medications, prescriptions, lab results, allergies, findings) from document text using AI and persists into patient record.",
+    description="Extracts structured clinical data (events, medications, prescriptions, lab results, allergies, findings) asynchronously using background processing.",
 )
 def extract_document_endpoint(
     document_id: UUID,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_application_user),
     db: Session = Depends(get_db),
     processing_service: DocumentProcessingService = Depends(get_document_processing_service),
@@ -693,14 +697,67 @@ def extract_document_endpoint(
     Protected document medical extraction endpoint:
     1. Validates user authentication and patient profile.
     2. Enforces ownership isolation (User -> Patient -> Document).
-    3. Triggers text extraction if not previously completed.
-    4. Extracts structured clinical information using configured AI provider (Google Gemini).
-    5. Persists entities (MedicalEvent, Medication, Prescription, LabResult, Allergy, Finding, AIAnalysis).
-    6. Returns structured extraction payload and persisted record counts.
+    3. Checks duplicate extraction lock / active status.
+    4. Schedules background task via FastAPI BackgroundTasks.
+    5. Returns HTTP 202 Accepted immediately.
     """
-    return processing_service.extract_user_document(
-        user=current_user,
-        document_id=document_id,
-        db=db,
+    patient = get_patient_for_user(current_user, db)
+
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    if document.patient_id != patient.id:
+        logger.warning(
+            "Unauthorized extract attempt on document %s by user %s (patient %s)",
+            document_id,
+            current_user.id,
+            patient.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to process this document.",
+        )
+
+    doc_uuid = document.id if isinstance(document.id, UUID) else UUID(str(document.id))
+    pat_uuid = patient.id if isinstance(patient.id, UUID) else UUID(str(patient.id))
+
+    # Check if extraction is already active
+    if processing_service.is_extraction_active(doc_uuid):
+        logger.info("Extraction already active for document %s; returning 202 Accepted.", doc_uuid)
+        return MedicalExtractionResponse(
+            document_id=doc_uuid,
+            patient_id=pat_uuid,
+            status=str(document.processing_status or "PROCESSING"),
+            extracted_record=None,
+            persisted_counts=None,
+            extracted_at=None,
+        )
+
+    # Update state to PROCESSING if not already COMPLETED
+    if document.processing_status != "COMPLETED":
+        setattr(document, "processing_status", "PROCESSING")
+        setattr(document, "error_message", None)
+        db.commit()
+        db.refresh(document)
+
+    # Schedule background processing
+    user_uuid = current_user.id if isinstance(current_user.id, UUID) else UUID(str(current_user.id))
+    background_tasks.add_task(
+        processing_service.run_background_extraction,
+        document_id=doc_uuid,
+        user_id=user_uuid,
+    )
+
+    return MedicalExtractionResponse(
+        document_id=doc_uuid,
+        patient_id=pat_uuid,
+        status=str(document.processing_status or "PROCESSING"),
+        extracted_record=None,
+        persisted_counts=None,
+        extracted_at=None,
     )
 

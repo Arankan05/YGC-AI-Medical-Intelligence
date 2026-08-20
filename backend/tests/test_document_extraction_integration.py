@@ -120,6 +120,7 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
             document_processor=self.mock_processor,
             medical_extraction_service=self.extraction_service,
             medical_persistence_service=self.persistence_service,
+            db_session_factory=TestSessionLocal,
         )
 
         # Setup FastAPI TestClient with overrides
@@ -166,15 +167,12 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
 
     def test_extract_user_document_success(self):
         response = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
-        assert response.status_code == 200
+        assert response.status_code == 202
 
         data = response.json()
         assert data["document_id"] == str(self.doc_a.id)
         assert data["patient_id"] == str(self.patient_a.id)
-        assert data["status"] == "COMPLETED"
-        assert "extracted_record" in data
-        assert len(data["extracted_record"]["medications"]) > 0
-        assert data["persisted_counts"]["medications"] >= 1
+        assert data["status"] in ["PROCESSING", "COMPLETED"]
 
         # Check records in DB
         meds = self.db.query(Medication).filter(Medication.patient_id == self.patient_a.id).all()
@@ -214,7 +212,7 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
         self.db.commit()
 
         response = self.client.post(f"/api/documents/{unprocessed_doc.id}/extract")
-        assert response.status_code == 200
+        assert response.status_code == 202
 
         # Should have called download and processor
         self.mock_storage.download_file.assert_called()
@@ -246,18 +244,11 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
         }
 
         response = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
-        assert response.status_code == 200, f"Expected 200 OK but got {response.status_code}: {response.text}"
+        assert response.status_code == 202, f"Expected 202 Accepted but got {response.status_code}: {response.text}"
 
         data = response.json()
         assert data["document_id"] == str(self.doc_a.id)
         assert data["patient_id"] == str(self.patient_a.id)
-        assert data["status"] == "COMPLETED"
-        assert len(data["extracted_record"]["lab_results"]) == 1
-        assert data["extracted_record"]["lab_results"][0]["test_name"] == "Hemoglobin A1c"
-        assert data["extracted_record"]["lab_results"][0]["value"] == "6.5"
-        assert data["extracted_record"]["lab_results"][0]["unit"] == "%"
-        assert data["extracted_record"]["lab_results"][0]["result_date"] is None
-        assert data["persisted_counts"]["lab_results"] == 1
 
         # Verify DB persistence
         db_labs = self.db.query(LabResult).filter(LabResult.patient_id == self.patient_a.id).all()
@@ -271,7 +262,7 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
     def test_extract_endpoint_re_extraction_is_idempotent(self):
         # 1. First extraction call
         resp1 = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
-        assert resp1.status_code == 200
+        assert resp1.status_code == 202
 
         # 2. Query /api/records/analyses -> Expect 1 record
         analyses_resp1 = self.client.get("/api/records/analyses")
@@ -282,7 +273,7 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
 
         # 3. Trigger extraction AGAIN for same document
         resp2 = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
-        assert resp2.status_code == 200
+        assert resp2.status_code == 202
 
         # 4. Query /api/records/analyses AGAIN -> Expect STILL 1 record!
         analyses_resp2 = self.client.get("/api/records/analyses")
@@ -336,7 +327,7 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
 
         # 1. Post to extract endpoint
         extract_resp = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
-        assert extract_resp.status_code == 200
+        assert extract_resp.status_code == 202
 
         # 2. Query /api/records/lab-results API
         lab_resp = self.client.get("/api/records/lab-results")
@@ -375,7 +366,7 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
 
         # 1. Post to extract endpoint
         extract_resp = self.client.post(f"/api/documents/{self.doc_a.id}/extract")
-        assert extract_resp.status_code == 200
+        assert extract_resp.status_code == 202
 
         # 2. Query /api/records/allergies API
         allergies_resp = self.client.get("/api/records/allergies")
@@ -386,3 +377,19 @@ class DocumentExtractionIntegrationTestCase(unittest.TestCase):
         assert allergies[0]["severity"] == "severe"
         assert allergies[0]["source_document_id"] == str(self.doc_a.id)
 
+    def test_duplicate_extraction_job_prevention(self):
+        # Test active extraction registration lock prevents concurrent execution
+        doc_id = self.doc_a.id
+        registered = self.processing_service.register_active_extraction(doc_id)
+        assert registered is True
+
+        # Second attempt must return False
+        duplicate_registered = self.processing_service.register_active_extraction(doc_id)
+        assert duplicate_registered is False
+
+        # Endpoint call while active returns 202 with active status
+        resp = self.client.post(f"/api/documents/{doc_id}/extract")
+        assert resp.status_code == 202
+
+        self.processing_service.unregister_active_extraction(doc_id)
+        assert self.processing_service.is_extraction_active(doc_id) is False

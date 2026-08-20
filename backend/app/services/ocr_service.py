@@ -71,7 +71,7 @@ class OCRService:
     Independent of web frameworks, HTTP requests, and database layers for pipeline reuse.
     """
 
-    DEFAULT_DPI: int = 200
+    DEFAULT_DPI: int = 150
 
     def __init__(self, tesseract_cmd: Optional[str] = None, default_dpi: int = DEFAULT_DPI):
         """
@@ -80,7 +80,7 @@ class OCRService:
         Args:
             tesseract_cmd: Optional explicit path to the tesseract executable.
                            If not provided, resolves from TESSERACT_CMD environment variable / Settings.
-            default_dpi: Rendering DPI for converting PDF pages to raster images (default 200).
+            default_dpi: Rendering DPI for converting PDF pages to raster images (default 150).
         """
         self.default_dpi = default_dpi
         self._configure_tesseract(tesseract_cmd)
@@ -127,9 +127,65 @@ class OCRService:
             return round(sum(conf_scores) / len(conf_scores), 2)
         return None
 
+    def _extract_text_and_confidence_from_ocr_data(self, ocr_data: dict) -> tuple[str, Optional[float]]:
+        """
+        Extracts reconstructed text string and average confidence score from a single image_to_data dict
+        in a single pass.
+        """
+        conf_scores: List[float] = []
+        lines: List[str] = []
+        current_line: List[str] = []
+        last_line_key = None
+
+        text_list = ocr_data.get("text", [])
+        conf_list = ocr_data.get("conf", [])
+        block_list = ocr_data.get("block_num", [])
+        par_list = ocr_data.get("par_num", [])
+        line_list = ocr_data.get("line_num", [])
+
+        n = len(text_list)
+        for i in range(n):
+            raw_w = text_list[i] if i < len(text_list) else ""
+            word = str(raw_w).strip() if raw_w is not None else ""
+            conf = conf_list[i] if i < len(conf_list) else -1
+
+            try:
+                c = float(conf)
+                if c >= 0 and word:
+                    conf_scores.append(c)
+            except (ValueError, TypeError):
+                pass
+
+            if not word:
+                continue
+
+            b_num = block_list[i] if i < len(block_list) else 0
+            p_num = par_list[i] if i < len(par_list) else 0
+            l_num = line_list[i] if i < len(line_list) else 0
+            line_key = (b_num, p_num, l_num)
+
+            if last_line_key is not None and line_key != last_line_key:
+                if current_line:
+                    lines.append(" ".join(current_line))
+                    current_line = []
+
+            last_line_key = line_key
+            current_line.append(word)
+
+        if current_line:
+            lines.append(" ".join(current_line))
+
+        extracted_text = "\n".join(lines).strip()
+
+        avg_confidence: Optional[float] = None
+        if conf_scores:
+            avg_confidence = round(sum(conf_scores) / len(conf_scores), 2)
+
+        return extracted_text, avg_confidence
+
     def extract_from_image(self, image_input: Union[Image.Image, bytes]) -> ImageOCRResult:
         """
-        Performs OCR text extraction on an image object or raw image bytes.
+        Performs single-pass OCR text extraction on an image object or raw image bytes.
 
         Args:
             image_input: PIL Image instance or raw image bytes (PNG, JPEG, TIFF, etc.).
@@ -167,10 +223,10 @@ class OCRService:
             if img.width <= 0 or img.height <= 0:
                 raise InvalidImageError("Image has invalid dimensions.")
 
-            # Perform OCR text extraction
+            # Perform single-pass OCR text & data extraction via image_to_data
             try:
-                raw_text = pytesseract.image_to_string(img)
-                extracted_text = raw_text.strip() if isinstance(raw_text, str) else ""
+                ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+                extracted_text, confidence = self._extract_text_and_confidence_from_ocr_data(ocr_data)
             except (pytesseract.TesseractNotFoundError, FileNotFoundError) as t_err:
                 logger.error("Tesseract executable not found or inaccessible: %s", type(t_err).__name__)
                 raise TesseractNotFoundError("Tesseract OCR executable was not found. Configure TESSERACT_CMD or verify system PATH.") from t_err
@@ -180,14 +236,6 @@ class OCRService:
             except Exception as e:
                 logger.error("Unexpected error during image OCR text extraction: %s", type(e).__name__)
                 raise OCRError(f"OCR processing failed: {type(e).__name__}") from e
-
-            # Extract confidence data
-            confidence: Optional[float] = None
-            try:
-                ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-                confidence = self._calculate_confidence(ocr_data)
-            except Exception as conf_err:
-                logger.warning("Could not calculate OCR confidence score: %s", type(conf_err).__name__)
 
             return ImageOCRResult(
                 extracted_text=extracted_text,

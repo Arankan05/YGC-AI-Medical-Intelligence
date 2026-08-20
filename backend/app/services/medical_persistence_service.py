@@ -123,19 +123,31 @@ class MedicalPersistenceService:
                         counts["events"] += 1
 
 
-            # 2. Persist Medications and Prescriptions with deduplication
-            for med in extracted.medications:
-                norm_name = (med.normalized_name or med.name).strip().lower()
-
-                # Check if patient already has this medication
-                existing_med = (
+            # 2. Persist Medications and Prescriptions with deduplication (Bulk pre-fetched)
+            med_names = list(set(
+                (med.normalized_name or med.name).strip().lower()
+                for med in extracted.medications
+                if (med.normalized_name or med.name)
+            ))
+            existing_meds_map: Dict[str, Medication] = {}
+            if med_names:
+                existing_meds = (
                     db.query(Medication)
                     .filter(
                         Medication.patient_id == patient_id,
-                        Medication.normalized_name == norm_name,
+                        Medication.normalized_name.in_(med_names),
                     )
-                    .first()
+                    .all()
                 )
+                for m in existing_meds:
+                    if m.normalized_name:
+                        existing_meds_map[str(m.normalized_name)] = m
+
+            for med in extracted.medications:
+                norm_name = (med.normalized_name or med.name).strip().lower()
+
+                # Check pre-fetched map
+                existing_med = existing_meds_map.get(norm_name)
 
                 if existing_med:
                     med_id = existing_med.id
@@ -148,6 +160,7 @@ class MedicalPersistenceService:
                     db.add(new_med)
                     db.flush()  # Generate UUID for new_med
                     med_id = new_med.id
+                    existing_meds_map[norm_name] = new_med
                     counts["medications"] += 1
 
                 # Create Prescription record linking to Medication and Document
@@ -192,7 +205,27 @@ class MedicalPersistenceService:
                 db.add(allergy_record)
                 counts["allergies"] += 1
 
-            # 5. Persist Findings with document-scoped idempotency
+            # 5. Persist Findings with document-scoped idempotency (Bulk pre-fetched)
+            clean_finding_titles = list(set(
+                (fd.title or "").strip()
+                for fd in extracted.findings
+                if (fd.title or "").strip()
+            ))
+            existing_findings_map: Dict[str, Finding] = {}
+            if clean_finding_titles:
+                existing_findings = (
+                    db.query(Finding)
+                    .filter(
+                        Finding.patient_id == patient_id,
+                        Finding.source_document_id == document_id,
+                        Finding.title.in_(clean_finding_titles),
+                    )
+                    .all()
+                )
+                for f in existing_findings:
+                    if f.title:
+                        existing_findings_map[str(f.title)] = f
+
             processed_finding_titles: set[str] = set()
 
             for fd in extracted.findings:
@@ -205,15 +238,7 @@ class MedicalPersistenceService:
                     continue
                 processed_finding_titles.add(clean_title)
 
-                existing_finding = (
-                    db.query(Finding)
-                    .filter(
-                        Finding.patient_id == patient_id,
-                        Finding.source_document_id == document_id,
-                        Finding.title == clean_title,
-                    )
-                    .first()
-                )
+                existing_finding = existing_findings_map.get(clean_title)
 
                 if existing_finding:
                     cast(Any, existing_finding).finding_type = fd.finding_type or "diagnosis"
@@ -234,6 +259,7 @@ class MedicalPersistenceService:
                         recommendation=fd.recommendation,
                     )
                     db.add(finding_record)
+                    existing_findings_map[clean_title] = finding_record
                     counts["findings"] += 1
 
 
@@ -247,20 +273,31 @@ class MedicalPersistenceService:
                 "persisted_counts": counts,
             }
 
-            existing_analyses = (
-                db.query(AIAnalysis)
-                .filter(
-                    AIAnalysis.patient_id == patient_id,
-                    AIAnalysis.analysis_type == "document_extraction",
+            try:
+                existing_analysis = (
+                    db.query(AIAnalysis)
+                    .filter(
+                        AIAnalysis.patient_id == patient_id,
+                        AIAnalysis.analysis_type == "document_extraction",
+                        AIAnalysis.result["document_id"].as_string() == str_doc_id,
+                    )
+                    .first()
                 )
-                .all()
-            )
-
-            existing_analysis = None
-            for an in existing_analyses:
-                if isinstance(an.result, dict) and an.result.get("document_id") == str_doc_id:
-                    existing_analysis = an
-                    break
+            except Exception:
+                # Fallback for SQL dialects that do not support JSON path expressions
+                existing_analyses = (
+                    db.query(AIAnalysis)
+                    .filter(
+                        AIAnalysis.patient_id == patient_id,
+                        AIAnalysis.analysis_type == "document_extraction",
+                    )
+                    .all()
+                )
+                existing_analysis = None
+                for an in existing_analyses:
+                    if isinstance(an.result, dict) and an.result.get("document_id") == str_doc_id:
+                        existing_analysis = an
+                        break
 
             if existing_analysis:
                 cast(Any, existing_analysis).result = result_payload

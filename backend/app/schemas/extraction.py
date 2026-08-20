@@ -325,14 +325,14 @@ class MedicalExtractionResponse(BaseModel):
 
     document_id: UUID = Field(..., description="UUID of the source document")
     patient_id: UUID = Field(..., description="UUID of the owning patient")
-    status: str = Field(default="COMPLETED", description="Extraction status ('COMPLETED' or 'FAILED')")
-    extracted_record: ExtractedMedicalRecord = Field(..., description="Full structured clinical extraction record")
-    persisted_counts: Dict[str, int] = Field(
-        default_factory=dict,
+    status: str = Field(default="COMPLETED", description="Extraction status ('PROCESSING', 'COMPLETED', or 'FAILED')")
+    extracted_record: Optional[ExtractedMedicalRecord] = Field(default=None, description="Full structured clinical extraction record")
+    persisted_counts: Optional[Dict[str, int]] = Field(
+        default=None,
         description="Count of database records created/updated per entity type",
     )
-    extracted_at: datetime = Field(
-        default_factory=datetime.now,
+    extracted_at: Optional[datetime] = Field(
+        default=None,
         description="Timestamp when extraction completed",
     )
 

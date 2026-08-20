@@ -199,6 +199,31 @@ class OCRServiceTestCase(unittest.TestCase):
             else:
                 os.environ.pop("TESSERACT_CMD", None)
 
+    def test_single_pass_tesseract_invocation_and_confidence(self):
+        """Verify that pytesseract.image_to_data is invoked exactly once per page and image_to_string is never called."""
+        from unittest.mock import patch
+
+        fake_dict = {
+            "level": [1, 2, 3, 4, 5],
+            "page_num": [1, 1, 1, 1, 1],
+            "block_num": [1, 1, 1, 1, 1],
+            "par_num": [1, 1, 1, 1, 1],
+            "line_num": [1, 1, 1, 1, 1],
+            "word_num": [1, 2, 3, 4, 5],
+            "conf": [95.0, 92.0, 90.0, 88.0, 96.0],
+            "text": ["Patient", "Test", "Hemoglobin", "13.5", "g/dL"],
+        }
+
+        with patch("pytesseract.image_to_data", return_value=fake_dict) as mock_to_data, \
+             patch("pytesseract.image_to_string") as mock_to_string:
+            image_bytes = create_in_memory_image_bytes("Test")
+            result = self.service.extract_from_image(image_bytes)
+
+            mock_to_data.assert_called_once()
+            mock_to_string.assert_not_called()
+            self.assertIn("Patient Test Hemoglobin 13.5 g/dL", result.extracted_text)
+            self.assertEqual(result.confidence, 92.2)
+
 
 if __name__ == "__main__":
     unittest.main()

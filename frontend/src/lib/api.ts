@@ -1191,15 +1191,13 @@ const defaultApiImplementation: MediGuardianApi = {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
-            // Automatically trigger AI extraction pipeline on upload
-            try {
-              if (data.id) {
-                await authFetch(`/api/documents/${data.id}/extract`, {
-                  method: "POST",
-                });
-              }
-            } catch {
-              // Extraction trigger failure is non-fatal for upload
+            // Asynchronously trigger background AI extraction without blocking upload completion
+            if (data.id) {
+              void authFetch(`/api/documents/${data.id}/extract`, {
+                method: "POST",
+              }).catch(() => {
+                // Background extraction trigger failure is non-fatal for upload
+              });
             }
             resolve(mapDocument(data));
           } catch {
