@@ -20,6 +20,7 @@ import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { api, toErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { queryClient } from "@/lib/query-client";
 import type { DocumentDetail } from "@/lib/types";
 
 export function DocumentDetailView({ documentId }: { documentId: string }) {
@@ -53,14 +54,36 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
     loadDoc();
   }, [loadDoc]);
 
+  // Poll status while document is processing
+  useEffect(() => {
+    if (doc?.status !== "processing") return;
+
+    const interval = setInterval(() => {
+      api()
+        .getDocument(documentId)
+        .then((updatedDoc) => {
+          setDoc(updatedDoc);
+          if (updatedDoc.status === "completed") {
+            setSuccessMsg("Medical intelligence successfully extracted and persisted to your records!");
+            queryClient.invalidateQueries({ queryKey: ["user"] });
+          } else if (updatedDoc.status === "failed") {
+            setError("Medical intelligence extraction failed. Please try again.");
+          }
+        })
+        .catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [doc?.status, documentId]);
+
   async function handleExtract() {
     setExtracting(true);
     setError(null);
     setSuccessMsg(null);
     try {
       await api().extractDocument(documentId);
-      setSuccessMsg("AI clinical intelligence successfully extracted and persisted!");
-      loadDoc();
+      const updatedDoc = await api().getDocument(documentId);
+      setDoc(updatedDoc);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -135,15 +158,21 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
           <Button
             size="sm"
             onClick={handleExtract}
-            disabled={extracting || doc.status === "failed"}
+            disabled={extracting || doc.status === "processing"}
             className="gap-1.5"
           >
-            {extracting ? (
+            {extracting || doc.status === "processing" ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
-            <span>{extracting ? "Extracting..." : "Re-Extract with AI"}</span>
+            <span>
+              {extracting || doc.status === "processing"
+                ? "Processing..."
+                : doc.status === "failed"
+                ? "Retry AI"
+                : "Extract AI"}
+            </span>
           </Button>
           <Button
             size="sm"

@@ -9,10 +9,11 @@ import { FilterChips, type FilterChip } from "@/components/filter-chips";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { api, toErrorMessage } from "@/lib/api";
+import { queryClient } from "@/lib/query-client";
 import type { DocumentType, MedicalDocument } from "@/lib/types";
 
 const CHIPS: FilterChip[] = [
-  { value: "all", label: "All documents" },
+  { value: "all", label: "All records" },
   { value: "Lab Report", label: "Lab reports" },
   { value: "Prescription", label: "Prescriptions" },
   { value: "Doctor Note", label: "Doctor notes" },
@@ -22,9 +23,9 @@ const CHIPS: FilterChip[] = [
 export function DocumentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const query = (searchParams.get("q") ?? "").trim().toLowerCase();
-  const [filter, setFilter] = useState<DocumentType | "all">("all");
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
+  const [filter, setFilter] = useState<DocumentType | "all">("all");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [extractingId, setExtractingId] = useState<string | null>(null);
@@ -50,6 +51,36 @@ export function DocumentsView() {
     fetchDocuments();
   }, []);
 
+  // Poll status while any document in the list is processing
+  const hasProcessingDoc = documents.some((d) => d.status === "processing");
+
+  useEffect(() => {
+    if (!hasProcessingDoc) return;
+
+    const interval = setInterval(() => {
+      api()
+        .listDocuments()
+        .then((latestDocs) => {
+          setDocuments((prevDocs) => {
+            const wasProcessing = prevDocs.filter((d) => d.status === "processing");
+            for (const prev of wasProcessing) {
+              const updated = latestDocs.find((d) => d.id === prev.id);
+              if (updated && updated.status === "completed") {
+                setSuccessMsg("Medical intelligence successfully extracted and persisted to your records!");
+                queryClient.invalidateQueries({ queryKey: ["user"] });
+              } else if (updated && updated.status === "failed") {
+                setError("Medical intelligence extraction failed. Please try again.");
+              }
+            }
+            return latestDocs;
+          });
+        })
+        .catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [hasProcessingDoc]);
+
   async function handleExtract(docId: string, event: React.MouseEvent) {
     event.stopPropagation();
     setExtractingId(docId);
@@ -57,8 +88,8 @@ export function DocumentsView() {
     setSuccessMsg(null);
     try {
       await api().extractDocument(docId);
-      setSuccessMsg("Medical intelligence successfully extracted and persisted to your records!");
-      fetchDocuments();
+      const latest = await api().listDocuments();
+      setDocuments(latest);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -251,18 +282,24 @@ export function DocumentsView() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            disabled={isExtracting || failed}
+                            disabled={isExtracting || document.status === "processing"}
                             onClick={(e) => handleExtract(document.id, e)}
                             className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
                             title="Extract and persist medical structured intelligence with AI"
                             aria-label={`Extract ${document.title} with AI`}
                           >
-                            {isExtracting ? (
+                            {isExtracting || document.status === "processing" ? (
                               <Loader2 className="size-3 animate-spin" />
                             ) : (
                               <Sparkles className="size-3" />
                             )}
-                            <span>{isExtracting ? "Extracting..." : "Extract AI"}</span>
+                            <span>
+                              {isExtracting || document.status === "processing"
+                                ? "Processing..."
+                                : failed
+                                ? "Retry AI"
+                                : "Extract AI"}
+                            </span>
                           </button>
                           <button
                             type="button"

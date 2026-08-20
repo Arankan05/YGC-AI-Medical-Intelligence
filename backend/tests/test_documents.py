@@ -706,6 +706,54 @@ class DocumentsTestCase(unittest.TestCase):
         self.assertIsNotNone(doc.error_message)
 
 
+    def test_extract_document_returns_202_immediately(self):
+        """POST /api/documents/{id}/extract returns 202 Accepted immediately with status PROCESSING."""
+        doc = Document(
+            id=uuid.uuid4(),
+            patient_id=self.patient_a_id,
+            file_name="extract_test.pdf",
+            file_path=f"{self.user_a_id}/{self.patient_a_id}/extract_test.pdf",
+            document_type="lab_report",
+            processing_status="UPLOADED",
+        )
+        self.db.add(doc)
+        self.db.commit()
+
+        token = self._create_token(sub=str(self.user_a_id), email=self.user_a_email)
+        response = self.client.post(
+            f"/api/documents/{doc.id}/extract",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        data = response.json()
+        self.assertEqual(data["document_id"], str(doc.id))
+        self.assertEqual(data["status"], "PROCESSING")
+
+        self.db.refresh(doc)
+        self.assertEqual(doc.processing_status, "PROCESSING")
+
+    def test_extract_other_user_document_forbidden(self):
+        """User A attempting to extract User B's document receives 403 Forbidden."""
+        doc_b = Document(
+            id=uuid.uuid4(),
+            patient_id=self.patient_b_id,
+            file_name="b_doc.pdf",
+            file_path=f"{self.user_b_id}/{self.patient_b_id}/b_doc.pdf",
+            document_type="lab_report",
+            processing_status="UPLOADED",
+        )
+        self.db.add(doc_b)
+        self.db.commit()
+
+        token_a = self._create_token(sub=str(self.user_a_id), email=self.user_a_email)
+        response = self.client.post(
+            f"/api/documents/{doc_b.id}/extract",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
 if __name__ == "__main__":
     unittest.main()
-

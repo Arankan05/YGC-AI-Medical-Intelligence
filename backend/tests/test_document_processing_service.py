@@ -315,5 +315,91 @@ class DocumentProcessingServiceTestCase(unittest.TestCase):
 
 
 
+    def test_run_background_extraction_success(self):
+        """Background extraction transitions document status to COMPLETED upon success."""
+        doc = Document(
+            id=uuid.uuid4(),
+            patient_id=self.patient_a.id,
+            file_name="background_doc.pdf",
+            file_path=f"{self.user_a.id}/{self.patient_a.id}/background_doc.pdf",
+            document_type="lab_report",
+            processing_status="UPLOADED",
+        )
+        self.db.add(doc)
+        self.db.commit()
+
+        self.mock_storage.download_file.return_value = b"%PDF-1.4 sample content"
+        self.mock_processor.process_document.return_value = DocumentProcessingResult(
+            extracted_text="Patient Blood Panel: Normal",
+            page_count=1,
+            extraction_method="pymupdf",
+            has_text=True,
+            page_texts=["Patient Blood Panel: Normal"],
+            confidence=None,
+        )
+
+        mock_extraction_service = MagicMock()
+        mock_extraction_service.extract_from_text.return_value = MagicMock(
+            events=[], medications=[], lab_results=[], allergies=[], findings=[], summary="Normal panel"
+        )
+        mock_persistence_service = MagicMock()
+        mock_persistence_service.persist_extracted_record.return_value = {"events": 0}
+
+        self.service._medical_extraction_service = mock_extraction_service
+        self.service._medical_persistence_service = mock_persistence_service
+
+        doc_id_uuid = uuid.UUID(str(doc.id))
+        user_id_uuid = uuid.UUID(str(self.user_a.id))
+
+        self.service.run_background_extraction(
+            document_id=doc_id_uuid,
+            user_id=user_id_uuid,
+            db=self.db,
+        )
+
+        self.db.refresh(doc)
+        self.assertEqual(doc.processing_status, "COMPLETED")
+        self.assertIsNone(doc.error_message)
+        self.assertEqual(doc.extracted_text, "Patient Blood Panel: Normal")
+        self.assertEqual(doc.extraction_method, "pymupdf")
+
+    def test_run_background_extraction_failure(self):
+        """Background extraction transitions document status to FAILED if processing throws exception."""
+        doc = Document(
+            id=uuid.uuid4(),
+            patient_id=self.patient_a.id,
+            file_name="fail_doc.pdf",
+            file_path=f"{self.user_a.id}/{self.patient_a.id}/fail_doc.pdf",
+            document_type="lab_report",
+            processing_status="UPLOADED",
+        )
+        self.db.add(doc)
+        self.db.commit()
+
+        self.mock_storage.download_file.side_effect = Exception("Storage error")
+
+        doc_id_uuid = uuid.UUID(str(doc.id))
+        user_id_uuid = uuid.UUID(str(self.user_a.id))
+
+        self.service.run_background_extraction(
+            document_id=doc_id_uuid,
+            user_id=user_id_uuid,
+            db=self.db,
+        )
+
+        self.db.refresh(doc)
+        self.assertEqual(doc.processing_status, "FAILED")
+        self.assertIsNotNone(doc.error_message)
+
+    def test_duplicate_extraction_lock(self):
+        """Duplicate extraction active check prevents duplicate concurrent extraction jobs."""
+        doc_id = uuid.uuid4()
+        self.assertTrue(self.service.register_active_extraction(doc_id))
+        self.assertTrue(self.service.is_extraction_active(doc_id))
+        self.assertFalse(self.service.register_active_extraction(doc_id))
+        self.service.unregister_active_extraction(doc_id)
+        self.assertFalse(self.service.is_extraction_active(doc_id))
+
+
 if __name__ == "__main__":
     unittest.main()
