@@ -5,6 +5,7 @@
  * and dispatch real HTTP requests to the FastAPI backend at NEXT_PUBLIC_API_URL.
  */
 
+import { clearMedicalCache } from "@/lib/query-client";
 import { getAccessToken, getSupabase } from "@/lib/supabase";
 import type {
   AIAnalysisRecord,
@@ -1045,10 +1046,8 @@ const defaultApiImplementation: MediGuardianApi = {
     if (!data.session) {
       throw new Error("Failed to start session. Please try again.");
     }
-    // Sync application User & Patient records in PostgreSQL asynchronously in background (non-blocking)
-    void authFetch("/api/auth/register", { method: "POST" }).catch(() => {
-      // Non-fatal if already registered or network transient
-    });
+    // Established users skip redundant /api/auth/register.
+    // getProfile() automatically provisions/retries via /api/auth/register if /api/auth/me returns 401.
   },
 
   async signUp(input: SignUpInput): Promise<void> {
@@ -1088,6 +1087,7 @@ const defaultApiImplementation: MediGuardianApi = {
   },
 
   async signOut(): Promise<void> {
+    clearMedicalCache();
     const sb = getSupabase();
     const { error } = await sb.auth.signOut();
     if (error) {
@@ -1363,18 +1363,11 @@ const defaultApiImplementation: MediGuardianApi = {
     }
     const data = await res.json();
 
-    // Safety flags come from the medication safety engine. A caller that already
-    // holds a report passes it in; otherwise it is fetched here. A failure must
-    // not stop the medication list itself from rendering, so the flags are
-    // simply omitted if the check is unavailable.
+    // Basic medication loading is decoupled from the safety engine. Safety flags
+    // are attached only when a safetyReport is explicitly supplied by the caller.
     let flagIndex: Map<string, MedicationFlagKind[]> | undefined;
-    try {
-      const report =
-        safetyReport ??
-        (await defaultApiImplementation.runMedicationSafetyCheck());
-      flagIndex = buildMedicationFlagIndex(report.issues);
-    } catch {
-      flagIndex = undefined;
+    if (safetyReport) {
+      flagIndex = buildMedicationFlagIndex(safetyReport.issues);
     }
 
     return (data || []).map((item: BackendMedicationResponse) =>
@@ -1463,10 +1456,20 @@ const defaultApiImplementation: MediGuardianApi = {
   },
 
   async listLabIntelligence(): Promise<LabResult[]> {
-    const [overview, trends] = await Promise.all([
-      defaultApiImplementation.getLabIntelligenceOverview(),
-      defaultApiImplementation.listLabTrends(),
-    ]);
+    const res = await authFetch("/api/lab-intelligence/combined", {
+      method: "GET",
+    });
+    if (res.status === 401) return [];
+    if (!res.ok) {
+      const [overview, trends] = await Promise.all([
+        defaultApiImplementation.getLabIntelligenceOverview(),
+        defaultApiImplementation.listLabTrends(),
+      ]);
+      return mergeLabIntelligence(overview, trends);
+    }
+    const data = await res.json();
+    const overview = mapLabOverview(data);
+    const trends: LabTrend[] = (data.trends || []).map(mapLabTrend);
     return mergeLabIntelligence(overview, trends);
   },
 

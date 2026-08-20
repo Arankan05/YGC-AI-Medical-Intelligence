@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   FileText,
   Pill,
@@ -14,59 +14,46 @@ import { AppShell } from "@/components/app-shell";
 import { MetricCard } from "@/components/metric-card";
 import { Panel, PanelHeader } from "@/components/panel";
 import { RiskBadge } from "@/components/risk-badge";
-import { api } from "@/lib/api";
+import {
+  useAllergiesQuery,
+  useDocumentsQuery,
+  useFindingsQuery,
+  useLabIntelligenceQuery,
+  useMedicationsQuery,
+  useOverviewQuery,
+  useProfileQuery,
+  useTimelineQuery,
+} from "@/hooks/use-medical-data";
 import { LAB_STATUS_LABELS, LAB_TREND_LABELS } from "@/lib/lab-display";
-import type {
-  AllergyRecord,
-  DashboardMetric,
-  Finding,
-  LabResult,
-  MedicalDocument,
-  MedicalOverview,
-  Medication,
-  TimelineEvent,
-} from "@/lib/types";
+import type { DashboardMetric } from "@/lib/types";
 
 export default function DashboardPage() {
-  const [overview, setOverview] = useState<MedicalOverview | null>(null);
-  const [documents, setDocuments] = useState<MedicalDocument[]>([]);
-  const [findings, setFindings] = useState<Finding[]>([]);
-  const [medications, setMedications] = useState<Medication[]>([]);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
-  const [allergies, setAllergies] = useState<AllergyRecord[]>([]);
-  const [labs, setLabs] = useState<LabResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: profile } = useProfileQuery();
+  const userId = profile?.id;
+
+  const { data: overview, isLoading: overviewLoading } = useOverviewQuery(userId);
+  const { data: documents = [] } = useDocumentsQuery(userId);
+  const { data: findingsData } = useFindingsQuery(userId);
+  const { data: medicationsData } = useMedicationsQuery(userId);
+  const { data: timelineData } = useTimelineQuery(userId);
+  const { data: allergies = [] } = useAllergiesQuery(userId);
+  const { data: labs = [] } = useLabIntelligenceQuery(userId);
 
   useEffect(() => {
-    let active = true;
-    Promise.all([
-      api().getOverview().catch(() => null),
-      api().listDocuments().catch(() => []),
-      api().listFindings().catch(() => []),
-      api().listMedications().catch(() => []),
-      api().listTimeline().catch(() => []),
-      api().listAllergies().catch(() => []),
-      api().listLabIntelligence().catch(() => []),
-    ])
-      .then(([ov, docs, fnds, meds, tm, al, lb]) => {
-        if (active) {
-          setOverview(ov);
-          setDocuments(docs || []);
-          setFindings(fnds || (ov?.priorityFindings ?? []));
-          setMedications(meds || (ov?.activeMedications ?? []));
-          setTimeline(tm || (ov?.recentEvents ?? []));
-          setAllergies(al || []);
-          setLabs(lb || []);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) setLoading(false);
-      });
+    if (process.env.NODE_ENV !== "production") {
+      console.time("[PERF] Dashboard Render Ready");
+    }
     return () => {
-      active = false;
+      if (process.env.NODE_ENV !== "production") {
+        console.timeEnd("[PERF] Dashboard Render Ready");
+      }
     };
   }, []);
+
+  const loading = overviewLoading;
+  const findings = findingsData || overview?.priorityFindings || [];
+  const medications = medicationsData || overview?.activeMedications || [];
+  const timeline = timelineData || overview?.recentEvents || [];
 
   const totalDocs = overview?.totalDocuments ?? documents.length;
   const totalEvents = overview?.totalEvents ?? timeline.length;

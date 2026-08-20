@@ -57,3 +57,11 @@ class LabIntelligenceTrendsResponse(BaseModel):
     """Collection of laboratory trends."""
 
     trends: list[LabTrendResponse]
+
+
+class LabIntelligenceCombinedResponse(BaseModel):
+    """Combined laboratory overview and trends response."""
+
+    results: list[LabResultAnalysisResponse]
+    available_tests: list[str]
+    trends: list[LabTrendResponse]

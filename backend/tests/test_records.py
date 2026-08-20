@@ -63,6 +63,9 @@ def test_get_medical_overview_empty(client, mock_db_session, mock_user_and_patie
     mock_filter.first.return_value = patient
     mock_filter.count.return_value = 0
 
+    mock_execute = mock_db_session.execute.return_value
+    mock_execute.one.return_value = (0, 0, 0, 0, 0, 0)
+
     mock_order = mock_filter.order_by.return_value
     mock_order.first.return_value = None
     mock_order.all.return_value = []
@@ -78,7 +81,40 @@ def test_get_medical_overview_empty(client, mock_db_session, mock_user_and_patie
     assert data["patient_id"] == str(patient.id)
     assert data["total_documents"] == 0
     assert data["total_medications"] == 0
+    assert data["total_findings"] == 0
+    assert data["total_events"] == 0
+    assert data["total_lab_results"] == 0
+    assert data["total_allergies"] == 0
     assert data["active_medications"] == []
+
+
+def test_get_medical_overview_with_data_counts(client, mock_db_session, mock_user_and_patient):
+    user, patient = mock_user_and_patient
+    mock_filter = mock_db_session.query.return_value.filter.return_value
+    mock_filter.first.return_value = patient
+
+    # Execute tuple: total_docs=3, total_meds=2, total_findings=4, total_events=5, total_lab=1, total_allergies=2
+    mock_execute = mock_db_session.execute.return_value
+    mock_execute.one.return_value = (3, 2, 4, 5, 1, 2)
+
+    mock_order = mock_filter.order_by.return_value
+    mock_order.first.return_value = None
+    mock_order.limit.return_value.all.return_value = []
+
+    mock_options = mock_db_session.query.return_value.options.return_value
+    mock_options.filter.return_value.order_by.return_value.all.return_value = []
+    mock_options.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+
+    response = client.get("/api/records/overview")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["patient_id"] == str(patient.id)
+    assert data["total_documents"] == 3
+    assert data["total_medications"] == 2
+    assert data["total_findings"] == 4
+    assert data["total_events"] == 5
+    assert data["total_lab_results"] == 1
+    assert data["total_allergies"] == 2
 
 
 def test_get_medications_list(client, mock_db_session, mock_user_and_patient):

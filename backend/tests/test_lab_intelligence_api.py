@@ -290,6 +290,43 @@ def test_overview_returns_multiple_tests(client, db_session, patient_a):
     assert len(data["results"]) == 3
 
 
+def test_combined_lab_intelligence_returns_overview_and_trends(client, db_session, patient_a):
+    """GET /combined returns both results, available tests, and historical trends in 1 call."""
+    _, patient = patient_a
+    _add_lab_result(db_session, patient, test_name="Glucose", value="4.0", result_date=date(2026, 1, 1))
+    _add_lab_result(db_session, patient, test_name="Glucose", value="6.0", result_date=date(2026, 2, 1))
+
+    response = client.get("/api/lab-intelligence/combined")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["available_tests"] == ["Glucose"]
+    assert len(data["results"]) == 2
+    assert len(data["trends"]) == 1
+    assert data["trends"][0]["test_name"] == "Glucose"
+    assert data["trends"][0]["trend"] == "INCREASING"
+
+
+def test_combined_lab_intelligence_patient_isolation(db_session, patient_a, patient_b):
+    """Security Audit Test: Combined endpoint never exposes another patient's data."""
+    user_a, patient_a_rec = patient_a
+    _, patient_b_rec = patient_b
+
+    _add_lab_result(db_session, patient_a_rec, test_name="A-Glucose")
+    _add_lab_result(db_session, patient_b_rec, test_name="B-Sodium")
+
+    with _authenticated_client(db_session, user_a) as client_a:
+        response = client_a.get("/api/lab-intelligence/combined")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available_tests"] == ["A-Glucose"]
+    assert len(data["results"]) == 1
+    assert data["results"][0]["test_name"] == "A-Glucose"
+    assert len(data["trends"]) == 1
+    assert data["trends"][0]["test_name"] == "A-Glucose"
+
+
 # ----------------------------------------------------------------------
 # All trends
 # ----------------------------------------------------------------------

@@ -228,6 +228,65 @@ class LabIntelligenceService:
             for key in sorted(grouped)
         )
 
+    def get_combined_intelligence(
+        self,
+        db: Session,
+        patient_id: UUID,
+    ) -> Tuple[Tuple[LabResultAnalysis, ...], Tuple[str, ...], Tuple[LabTrend, ...]]:
+        """
+        Builds overview analyses, available test list, and test trends in a single DB query.
+        """
+        # Eager-load all lab results for patient in a single query
+        all_results = (
+            db.query(LabResult)
+            .options(joinedload(LabResult.document))
+            .filter(
+                LabResult.patient_id == patient_id,
+            )
+            .order_by(
+                LabResult.result_date.desc().nullslast(),
+                LabResult.created_at.desc(),
+                LabResult.id.asc(),
+            )
+            .all()
+        )
+
+        # 1. Analyses (newest first)
+        analyses = tuple(self._analyze_result(r) for r in all_results)
+
+        # 2. Available tests
+        test_names_map: Dict[str, str] = {}
+        grouped: Dict[str, List[LabResult]] = {}
+        display_names: Dict[str, str] = {}
+
+        # 3. Trends (chronological - oldest first)
+        chronological_results = sorted(
+            [r for r in all_results if r.test_name],
+            key=lambda r: (
+                r.result_date or date.max,
+                r.created_at or date.max,
+                str(r.id),
+            )
+        )
+
+        for result in chronological_results:
+            name = result.test_name
+            if not name:
+                continue
+            key = name.strip().lower()
+            if key:
+                test_names_map.setdefault(key, name.strip())
+                grouped.setdefault(key, []).append(result)
+                display_names.setdefault(key, name.strip())
+
+        available_tests = tuple(sorted(test_names_map.values(), key=str.lower))
+        trends = tuple(
+            self._build_trend(display_names[key], grouped[key])
+            for key in sorted(grouped)
+        )
+
+        return analyses, available_tests, trends
+
     def _fetch_chronological_results(
         self,
         db: Session,

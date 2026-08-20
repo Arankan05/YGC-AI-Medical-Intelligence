@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -93,21 +93,21 @@ def _map_recommendation(scored: ScoredRecommendation) -> DoctorRecommendationRes
     """
     recommendation = scored.recommendation
     return DoctorRecommendationResponse(
-        id=recommendation.id,
-        provider_name=recommendation.provider_name,
+        id=cast(Any, recommendation.id),
+        provider_name=cast(Any, recommendation.provider_name),
         kind=scored.kind or "",
         specialties=list(scored.specialties),
-        address=recommendation.address,
-        latitude=recommendation.latitude,
-        longitude=recommendation.longitude,
-        distance_km=recommendation.distance_km,
-        phone=recommendation.phone,
-        website=recommendation.website,
-        opening_hours=recommendation.opening_hours,
-        source=recommendation.source,
+        address=cast(Any, recommendation.address),
+        latitude=cast(Any, recommendation.latitude),
+        longitude=cast(Any, recommendation.longitude),
+        distance_km=cast(Any, recommendation.distance_km),
+        phone=cast(Any, recommendation.phone),
+        website=cast(Any, recommendation.website),
+        opening_hours=cast(Any, recommendation.opening_hours),
+        source=cast(Any, recommendation.source),
         match_score=scored.match_score,
         match_breakdown=_map_breakdown(scored),
-        created_at=recommendation.created_at,
+        created_at=cast(Any, recommendation.created_at),
     )
 
 
@@ -120,16 +120,16 @@ def _map_summary(search: DoctorSearch, result_count: int) -> DoctorSearchSummary
     stored scope verbatim ("hospital", "doctor:cardiology").
     """
     return DoctorSearchSummaryResponse(
-        id=search.id,
-        specialty=search.specialty,
-        location_query=search.location_query,
-        latitude=search.latitude,
-        longitude=search.longitude,
-        availability_preference=search.availability_preference,
-        search_radius=search.search_radius,
-        finding_id=search.finding_id,
+        id=cast(Any, search.id),
+        specialty=cast(Any, search.specialty),
+        location_query=cast(Any, search.location_query),
+        latitude=cast(Any, search.latitude),
+        longitude=cast(Any, search.longitude),
+        availability_preference=cast(Any, search.availability_preference),
+        search_radius=cast(Any, search.search_radius),
+        finding_id=cast(Any, search.finding_id),
         result_count=result_count,
-        created_at=search.created_at,
+        created_at=cast(Any, search.created_at),
     )
 
 
@@ -194,9 +194,9 @@ def _plan_search(
     specialty = payload.specialty
     if specialty is None and finding is not None:
         specialty = discovery.derive_specialty(
-            finding_type=finding.finding_type,
-            title=finding.title,
-            description=finding.description,
+            finding_type=cast(Any, finding.finding_type),
+            title=cast(Any, finding.title),
+            description=cast(Any, finding.description),
         )
 
     if payload.kinds:
@@ -247,7 +247,8 @@ def search_providers(
     persistence: DoctorSearchPersistenceService = Depends(get_persistence),
 ) -> DoctorSearchResponse:
     patient = get_patient_for_user(current_user, db)
-    finding = _resolve_finding(db, patient.id, payload.finding_id)
+    patient_id = cast(Any, patient.id)
+    finding = _resolve_finding(db, patient_id, payload.finding_id)
     requested_kind, specialty, query_kinds = _plan_search(payload, finding, discovery)
 
     if payload.latitude is not None and payload.longitude is not None:
@@ -302,7 +303,7 @@ def search_providers(
 
     search = persistence.record_search(
         db,
-        patient_id=patient.id,
+        patient_id=patient_id,
         location_query=location_label,
         requested_kind=requested_kind,
         requested_specialty=specialty,
@@ -310,11 +311,12 @@ def search_providers(
         longitude=lon,
         search_radius=payload.radius_km,
         availability_preference=payload.availability,
-        finding_id=finding.id if finding is not None else None,
+        finding_id=cast(Any, finding.id) if finding is not None else None,
         ranked=ranked,
     )
 
-    scored = persistence.score_recommendations(search, list(search.recommendations))
+    recs = cast(Any, search.recommendations)
+    scored = persistence.score_recommendations(search, list(recs))
     return _map_search(search, scored)
 
 
@@ -341,7 +343,7 @@ def list_search_history(
     persistence: DoctorSearchPersistenceService = Depends(get_persistence),
 ) -> DoctorSearchHistoryResponse:
     patient = get_patient_for_user(current_user, db)
-    rows = persistence.list_searches_with_counts(db, patient_id=patient.id, limit=limit)
+    rows = persistence.list_searches_with_counts(db, patient_id=cast(Any, patient.id), limit=limit)
     return DoctorSearchHistoryResponse(
         searches=[_map_summary(search, count) for search, count in rows],
     )
@@ -373,7 +375,7 @@ def get_recorded_search(
     patient = get_patient_for_user(current_user, db)
     loaded = persistence.load_scored_search(
         db,
-        patient_id=patient.id,
+        patient_id=cast(Any, patient.id),
         search_id=search_id,
     )
 

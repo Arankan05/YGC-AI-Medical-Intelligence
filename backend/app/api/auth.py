@@ -1,4 +1,5 @@
 import logging
+from typing import Any, cast
 import uuid
 
 from fastapi import APIRouter, Depends, status
@@ -43,7 +44,7 @@ def register_application_user(
         stale_user = db.query(User).filter(User.email == email, User.id != user_uuid).first()
         if stale_user:
             # Archive old user's email to release the unique constraint without transferring ownership of old medical data
-            stale_user.email = f"{stale_user.id}@archived.local"
+            cast(Any, stale_user).email = f"{stale_user.id}@archived.local"
             db.flush()
 
         user = User(id=user_uuid, email=email)

@@ -8,6 +8,7 @@ from app.core.security import get_current_application_user
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.lab_intelligence import (
+    LabIntelligenceCombinedResponse,
     LabIntelligenceOverviewResponse,
     LabIntelligenceTrendsResponse,
     LabResultAnalysisResponse,
@@ -71,6 +72,30 @@ def _map_trend(trend: LabTrend) -> LabTrendResponse:
         unit=trend.unit,
         trend=trend.trend,
         points=[_map_trend_point(p) for p in trend.points],
+    )
+
+
+@router.get(
+    "/combined",
+    response_model=LabIntelligenceCombinedResponse,
+    summary="Get combined laboratory overview and trends in a single database query",
+    description="Returns analysed results, available test names, and historical trends for the authenticated patient in one network request.",
+)
+def get_combined_lab_intelligence(
+    current_user: User = Depends(get_current_application_user),
+    db: Session = Depends(get_db),
+) -> LabIntelligenceCombinedResponse:
+    patient = get_patient_for_user(current_user, db)
+    service = get_lab_intelligence_service()
+
+    analyses, available_tests, trends = service.get_combined_intelligence(
+        db=db, patient_id=patient.id
+    )
+
+    return LabIntelligenceCombinedResponse(
+        results=[_map_result(a) for a in analyses],
+        available_tests=list(available_tests),
+        trends=[_map_trend(t) for t in trends],
     )
 
 

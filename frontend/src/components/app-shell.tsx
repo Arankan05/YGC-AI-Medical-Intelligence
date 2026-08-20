@@ -7,9 +7,8 @@ import { Loader2 } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopBar } from "@/components/app-top-bar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { api } from "@/lib/api";
+import { useFindingsQuery, useProfileQuery } from "@/hooks/use-medical-data";
 import { getAccessToken } from "@/lib/supabase";
-import type { Finding, UserProfile } from "@/lib/types";
 
 /**
  * Figma: ⚙ Shell Template (node 23:134) — App Sidebar + App Top Bar + content.
@@ -26,70 +25,44 @@ export function AppShell({
 }) {
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
-  const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
-  const [notifications, setNotifications] = useState<Finding[]>([]);
-  const [userProfile, setUserProfile] = useState<
-    Pick<UserProfile, "fullName" | "initials" | "accountType">
-  >({
-    fullName: "Account",
-    initials: "—",
-    accountType: "Patient account",
-  });
+  const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
     let active = true;
-
-    async function checkAuthAndLoad() {
-      const token = await getAccessToken();
-      if (!active) return;
-      if (!token) {
-        setAuthStatus("unauthenticated");
-        router.replace("/sign-in");
-        return;
+    getAccessToken().then((token) => {
+      if (active) {
+        if (!token) {
+          router.replace("/sign-in");
+        } else {
+          setAuthChecking(false);
+        }
       }
-
-      setAuthStatus("authenticated");
-
-      api()
-        .getProfile()
-        .then((profile) => {
-          if (active) {
-            setUserProfile({
-              fullName: profile.fullName,
-              initials: profile.initials,
-              accountType: profile.accountType,
-            });
-          }
-        })
-        .catch(() => {
-          if (active) {
-            setAuthStatus("unauthenticated");
-            router.replace("/sign-in");
-          }
-        });
-
-      api()
-        .listNotifications()
-        .then((items) => {
-          if (active) {
-            setNotifications(items || []);
-          }
-        })
-        .catch(() => {
-          if (active) {
-            setNotifications([]);
-          }
-        });
-    }
-
-    checkAuthAndLoad();
-
+    });
     return () => {
       active = false;
     };
   }, [router]);
 
-  if (authStatus === "checking") {
+  const { data: profile, isError: profileError } = useProfileQuery(!authChecking);
+
+  useEffect(() => {
+    if (profileError) {
+      router.replace("/sign-in");
+    }
+  }, [profileError, router]);
+
+  const { data: findings = [] } = useFindingsQuery(profile?.id, Boolean(profile?.id));
+  const notifications = findings.filter(
+    (f) => f.risk === "high" || f.risk === "medium"
+  );
+
+  const userProfile = {
+    fullName: profile?.fullName || "Account",
+    initials: profile?.initials || "—",
+    accountType: profile?.accountType || "Patient account",
+  };
+
+  if (authChecking || (!profile && !profileError)) {
     return (
       <div className="flex h-dvh w-full flex-col items-center justify-center gap-3 bg-neutral-50">
         <Loader2 className="size-7 animate-spin text-brand-700" />
@@ -98,7 +71,7 @@ export function AppShell({
     );
   }
 
-  if (authStatus === "unauthenticated") {
+  if (profileError) {
     return null;
   }
 
