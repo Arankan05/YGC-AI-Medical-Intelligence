@@ -283,28 +283,23 @@ async def get_current_application_user(
     corresponding application User record in the PostgreSQL database.
 
     Ensures strict tenant isolation:
-    - Finds only the User record matching the authenticated Supabase identity.
+    - Finds ONLY the User record matching the authenticated Supabase Auth UUID (JWT sub).
     - Rejects unmapped or unauthorized requests with HTTP 401.
-    - Never allows access to another user's record.
+    - Never falls back to email matching to prevent cross-account data exposure upon account re-registration.
 
     Returns:
         User SQLAlchemy model instance for the authenticated user.
 
     Raises:
-        HTTPException(401): If no application user record exists for this identity.
+        HTTPException(401): If no application user record exists for this identity UUID.
     """
     user: Optional[User] = None
 
-    # Step 1: Match by primary key UUID (if auth_user.id is a valid UUID)
     try:
         user_uuid = uuid.UUID(auth_user.id)
         user = db.query(User).filter(User.id == user_uuid).first()
     except (ValueError, TypeError, AttributeError):
         pass
-
-    # Step 2: Fallback to matching by unique email if not found by primary key UUID
-    if user is None and auth_user.email:
-        user = db.query(User).filter(User.email == auth_user.email).first()
 
     if user is None:
         logger.warning(

@@ -18,8 +18,17 @@ from app.core.security import (
     get_current_user,
     validate_supabase_token,
 )
-from app.db.database import get_db
+from app.db.database import Base, get_db
 from app.main import app
+from app.models.ai_analysis import AIAnalysis
+from app.models.allergy import Allergy
+from app.models.document import Document
+from app.models.finding import Finding
+from app.models.lab_result import LabResult
+from app.models.medical_event import MedicalEvent
+from app.models.medication import Medication
+from app.models.patient import Patient
+from app.models.prescription import Prescription
 from app.models.user import User
 from app.schemas.auth import AuthenticatedUser
 
@@ -50,11 +59,11 @@ class AuthTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Create all tables on SQLite
-        User.metadata.create_all(bind=test_engine)
+        Base.metadata.create_all(bind=test_engine)
 
     @classmethod
     def tearDownClass(cls):
-        User.metadata.drop_all(bind=test_engine)
+        Base.metadata.drop_all(bind=test_engine)
 
     def setUp(self):
         self.db = TestSessionLocal()
@@ -68,6 +77,8 @@ class AuthTestCase(unittest.TestCase):
             email=self.user_email,
         )
         self.db.add(self.db_user)
+        self.patient = Patient(user_id=self.user_uuid)
+        self.db.add(self.patient)
         self.db.commit()
         self.db.refresh(self.db_user)
 
@@ -86,7 +97,16 @@ class AuthTestCase(unittest.TestCase):
         self.client = TestClient(app)
 
     def tearDown(self):
-        # Clean up database records
+        # Clean up database records in dependency order
+        self.db.query(AIAnalysis).delete()
+        self.db.query(Allergy).delete()
+        self.db.query(Finding).delete()
+        self.db.query(LabResult).delete()
+        self.db.query(Prescription).delete()
+        self.db.query(Medication).delete()
+        self.db.query(MedicalEvent).delete()
+        self.db.query(Document).delete()
+        self.db.query(Patient).delete()
         self.db.query(User).delete()
         self.db.commit()
         self.db.close()
@@ -266,17 +286,17 @@ class AuthTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 401)
         self.assertIn("missing user identifier", ctx.exception.detail.lower())
 
-    def test_email_fallback_mapping_for_application_user(self):
-        """When auth_user has non-matching UUID but matching email, it safely maps to the User."""
+    def test_no_email_fallback_mapping_for_application_user(self):
+        """When auth_user has non-matching UUID but matching email, email fallback is rejected with HTTP 401."""
         different_uuid_str = str(uuid.uuid4())
         auth_identity = AuthenticatedUser(
             id=different_uuid_str,
             email=self.user_email,
         )
         import asyncio
-        user = asyncio.run(get_current_application_user(auth_identity, self.db))
-        self.assertEqual(user.id, self.user_uuid)
-        self.assertEqual(user.email, self.user_email)
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(get_current_application_user(auth_identity, self.db))
+        self.assertEqual(ctx.exception.status_code, status.HTTP_401_UNAUTHORIZED)
 
     @patch("app.core.security.get_supabase_client")
     def test_remote_supabase_validation_fallback(self, mock_get_client):
@@ -330,6 +350,121 @@ class AuthTestCase(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             validate_supabase_token("invalid.token", settings_no_secret)
         self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_recreated_account_data_isolation(self):
+        """
+        Regression Test for Data Isolation on Account Re-creation:
+        User A has a registered account with medical records (document, event, medication, finding).
+        User B registers with a new Supabase Auth UUID using User A's email address (simulating account deletion and re-creation in Supabase).
+        Verifies:
+        1. User B gets a new User & Patient record and sees 0 documents, 0 events, 0 medications, 0 findings, 0 priority items.
+        2. User B cannot access User A's document (returns 403 Forbidden).
+        3. User A's data remains intact and accessible only to User A.
+        """
+        shared_email = "recreated_user@example.com"
+        uuid_a = uuid.uuid4()
+        user_a = User(id=uuid_a, email=shared_email)
+        self.db.add(user_a)
+        patient_a = Patient(user_id=uuid_a)
+        self.db.add(patient_a)
+        self.db.commit()
+
+        doc_a = Document(
+            id=uuid.uuid4(),
+            patient_id=patient_a.id,
+            file_name="user_a_lab.pdf",
+            file_path=f"{uuid_a}/{patient_a.id}/user_a_lab.pdf",
+            document_type="lab_report",
+            processing_status="COMPLETED",
+        )
+        self.db.add(doc_a)
+
+        med_a = Medication(
+            id=uuid.uuid4(),
+            patient_id=patient_a.id,
+            name="Amoxicillin",
+            normalized_name="amoxicillin",
+        )
+        self.db.add(med_a)
+
+        pres_a = Prescription(
+            id=uuid.uuid4(),
+            patient_id=patient_a.id,
+            document_id=doc_a.id,
+            medication_id=med_a.id,
+            dosage="500mg",
+        )
+        self.db.add(pres_a)
+
+        event_a = MedicalEvent(
+            id=uuid.uuid4(),
+            patient_id=patient_a.id,
+            document_id=doc_a.id,
+            event_type="consultation",
+            title="User A Event",
+        )
+        self.db.add(event_a)
+
+        finding_a = Finding(
+            id=uuid.uuid4(),
+            patient_id=patient_a.id,
+            source_document_id=doc_a.id,
+            finding_type="diagnosis",
+            title="User A Finding",
+            description="User A Description",
+        )
+        self.db.add(finding_a)
+        self.db.commit()
+
+        # Step 1: User B registers with a NEW Supabase Auth UUID (uuid_b) and the same email address
+        uuid_b = uuid.uuid4()
+        token_b = self._create_token(sub=str(uuid_b), email=shared_email)
+
+        reg_response = self.client.post(
+            "/api/auth/register",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        self.assertEqual(reg_response.status_code, status.HTTP_201_CREATED)
+        reg_data = reg_response.json()
+        self.assertEqual(reg_data["id"], str(uuid_b))
+
+        # Step 2: Query User B's overview -> Must return 0 documents, 0 events, 0 medications, 0 findings, 0 priority items
+        overview_res = self.client.get(
+            "/api/records/overview",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        self.assertEqual(overview_res.status_code, status.HTTP_200_OK)
+        ov_data = overview_res.json()
+        self.assertEqual(ov_data["total_documents"], 0)
+        self.assertEqual(ov_data["total_medications"], 0)
+        self.assertEqual(len(ov_data["recent_events"]), 0)
+        self.assertEqual(len(ov_data["active_medications"]), 0)
+        self.assertEqual(len(ov_data["priority_findings"]), 0)
+
+        # Step 3: Query User B's documents -> Must return []
+        docs_res = self.client.get(
+            "/api/documents",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        self.assertEqual(docs_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(docs_res.json()["items"], [])
+        self.assertEqual(docs_res.json()["total"], 0)
+
+        # Step 4: User B attempts to access User A's document -> Must return 403 Forbidden
+        doc_detail_res = self.client.get(
+            f"/api/documents/{doc_a.id}",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        self.assertEqual(doc_detail_res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Step 5: Verify User A's data remains intact and accessible when authenticating as User A
+        token_a = self._create_token(sub=str(uuid_a), email=shared_email)
+        doc_a_res = self.client.get(
+            f"/api/documents/{doc_a.id}",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        self.assertEqual(doc_a_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(doc_a_res.json()["id"], str(doc_a.id))
 
 
 if __name__ == "__main__":

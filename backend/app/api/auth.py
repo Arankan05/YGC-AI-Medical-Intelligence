@@ -28,7 +28,7 @@ def register_application_user(
 ) -> UserResponse:
     """
     Idempotent registration/sync endpoint for authenticated Supabase users.
-    Creates application User and default Patient profile in PostgreSQL.
+    Creates application User and default Patient profile in PostgreSQL strictly by Supabase Auth UUID.
     """
     try:
         user_uuid = uuid.UUID(auth_user.id)
@@ -37,10 +37,15 @@ def register_application_user(
 
     email = auth_user.email or f"{user_uuid}@user.local"
     user = db.query(User).filter(User.id == user_uuid).first()
-    if user is None:
-        user = db.query(User).filter(User.email == email).first()
 
     if user is None:
+        # Check if an old user record exists with the same email (from a deleted Supabase Auth account)
+        stale_user = db.query(User).filter(User.email == email, User.id != user_uuid).first()
+        if stale_user:
+            # Archive old user's email to release the unique constraint without transferring ownership of old medical data
+            stale_user.email = f"{stale_user.id}@archived.local"
+            db.flush()
+
         user = User(id=user_uuid, email=email)
         db.add(user)
         patient = Patient(user_id=user.id)
@@ -49,7 +54,7 @@ def register_application_user(
         db.refresh(user)
         logger.info("Successfully registered application User %s (%s)", user.id, user.email)
     else:
-        # Ensure patient profile exists
+        # Ensure patient profile exists for this exact user UUID
         patient = db.query(Patient).filter(Patient.user_id == user.id).first()
         if not patient:
             patient = Patient(user_id=user.id)
