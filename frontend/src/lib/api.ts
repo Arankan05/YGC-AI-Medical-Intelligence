@@ -45,6 +45,15 @@ export class ApiNotConfiguredError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 /**
  * The place name could not be resolved.
  *
@@ -1636,7 +1645,7 @@ const defaultApiImplementation: MediGuardianApi = {
   async getProfile(): Promise<UserProfile> {
     const token = await getAccessToken();
     if (!token) {
-      throw new Error("No active session found. Please sign in.");
+      throw new ApiError("No active session found. Please sign in.", 401);
     }
     let res = await authFetch("/api/auth/me", { method: "GET" });
     if (res.status === 401) {
@@ -1652,7 +1661,7 @@ const defaultApiImplementation: MediGuardianApi = {
       const err = await res
         .json()
         .catch(() => ({ detail: "Failed to fetch profile." }));
-      throw new Error(err.detail || "Failed to fetch profile.");
+      throw new ApiError(err.detail || "Failed to fetch profile.", res.status);
     }
     const backendUser = await res.json();
     const sb = getSupabase();
