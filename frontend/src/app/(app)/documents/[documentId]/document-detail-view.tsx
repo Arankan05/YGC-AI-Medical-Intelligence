@@ -23,6 +23,12 @@ import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/query-client";
 import type { DocumentDetail } from "@/lib/types";
 
+/** One shared shape for the extracted-detail tabs so every tab matches. */
+const TAB_BASE =
+  "shrink-0 cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-brand-700/25";
+const TAB_ACTIVE = "border-brand-600 font-semibold text-brand-700";
+const TAB_IDLE = "border-transparent text-neutral-500 hover:text-neutral-900";
+
 export function DocumentDetailView({ documentId }: { documentId: string }) {
   const router = useRouter();
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
@@ -114,12 +120,12 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
 
   if (error && !doc) {
     return (
-      <div className="flex w-full flex-col gap-4 p-6">
+      <div className="flex w-full flex-col gap-[18px] px-4 py-[22px] md:px-[26px]">
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-4 py-3 text-sm text-risk-high"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          <span>{error}</span>
+          <span className="min-w-0 flex-1">{error}</span>
           <Button size="sm" variant="outline" onClick={loadDoc}>
             Retry
           </Button>
@@ -190,13 +196,13 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
       {successMsg && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 rounded-md border border-status-ok-border bg-status-ok-bg px-3.5 py-2.5 text-[13px] text-status-ok"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-status-ok-border bg-status-ok-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-status-ok"
         >
-          <span>{successMsg}</span>
+          <span className="min-w-0 flex-1">{successMsg}</span>
           <button
             type="button"
             onClick={() => setSuccessMsg(null)}
-            className="text-xs font-semibold underline"
+            className="shrink-0 cursor-pointer rounded text-xs font-semibold text-status-ok underline outline-none transition-opacity hover:opacity-80 focus-visible:ring-3 focus-visible:ring-brand-700/25"
           >
             Dismiss
           </button>
@@ -206,7 +212,7 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] text-risk-high"
+          className="rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
           {error}
         </div>
@@ -215,15 +221,15 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
       {/* Document Header Card */}
       <div className="flex w-full flex-col gap-4 rounded-xl border border-neutral-200 bg-neutral-0 p-5 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-3.5">
+          <div className="flex min-w-0 items-start gap-3.5">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
               <FileText className="size-6" strokeWidth={1.8} />
             </span>
-            <div className="flex flex-col gap-1">
-              <h2 className="text-lg font-semibold tracking-[-0.2px] text-neutral-900">
+            <div className="flex min-w-0 flex-col gap-1">
+              <h2 className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
                 {doc.title}
               </h2>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-4 text-neutral-500">
                 <span className="font-medium text-neutral-700">{doc.type}</span>
                 <span>·</span>
                 <span>Uploaded on {doc.uploadedAt}</span>
@@ -274,9 +280,9 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
 
       {/* AI Summary Banner if present */}
       {doc.aiSummary && (
-        <div className="flex w-full flex-col gap-2 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-sm">
+        <div className="flex w-full flex-col gap-2 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-card">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-brand-700" />
+            <Sparkles className="size-4 shrink-0 text-brand-700" />
             <h3 className="text-sm font-semibold text-brand-900">Extracted Clinical Summary</h3>
           </div>
           <p className="text-[13px] leading-[21px] text-neutral-800">{doc.aiSummary}</p>
@@ -284,64 +290,39 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
       )}
 
       {/* Navigation Tabs for Extracted Details */}
-      <div className="flex w-full border-b border-neutral-200">
+      <div className="scrollbar-thin flex w-full overflow-x-auto border-b border-neutral-200">
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={cn(
-            "cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors",
-            activeTab === "overview"
-              ? "border-brand-600 text-brand-700 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
-          )}
+          className={cn(TAB_BASE, activeTab === "overview" ? TAB_ACTIVE : TAB_IDLE)}
         >
           Overview & Counts
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("medications")}
-          className={cn(
-            "cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors",
-            activeTab === "medications"
-              ? "border-brand-600 text-brand-700 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
-          )}
+          className={cn(TAB_BASE, activeTab === "medications" ? TAB_ACTIVE : TAB_IDLE)}
         >
           Medications ({doc.medications.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("labs")}
-          className={cn(
-            "cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors",
-            activeTab === "labs"
-              ? "border-brand-600 text-brand-700 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
-          )}
+          className={cn(TAB_BASE, activeTab === "labs" ? TAB_ACTIVE : TAB_IDLE)}
         >
           Lab Results ({doc.labResults.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("allergies")}
-          className={cn(
-            "cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors",
-            activeTab === "allergies"
-              ? "border-brand-600 text-brand-700 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
-          )}
+          className={cn(TAB_BASE, activeTab === "allergies" ? TAB_ACTIVE : TAB_IDLE)}
         >
           Allergies ({doc.allergies.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("events")}
-          className={cn(
-            "cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors",
-            activeTab === "events"
-              ? "border-brand-600 text-brand-700 font-semibold"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
-          )}
+          className={cn(TAB_BASE, activeTab === "events" ? TAB_ACTIVE : TAB_IDLE)}
         >
           Events ({doc.events.length})
         </button>
@@ -349,12 +330,7 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
           <button
             type="button"
             onClick={() => setActiveTab("text")}
-            className={cn(
-              "cursor-pointer border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors",
-              activeTab === "text"
-                ? "border-brand-600 text-brand-700 font-semibold"
-                : "border-transparent text-neutral-500 hover:text-neutral-900"
-            )}
+            className={cn(TAB_BASE, activeTab === "text" ? TAB_ACTIVE : TAB_IDLE)}
           >
             Raw Text
           </button>
@@ -363,12 +339,12 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
 
       {/* Tab Contents */}
       {activeTab === "overview" && (
-        <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid w-full grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex items-center gap-3.5 rounded-xl border border-neutral-200 bg-neutral-0 p-4 shadow-card">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
               <Pill className="size-5" strokeWidth={1.8} />
             </span>
-            <div className="flex flex-col">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <span className="text-xl font-semibold text-neutral-900">{doc.medications.length}</span>
               <span className="type-overline text-neutral-500">MEDICATIONS EXTRACTED</span>
             </div>
@@ -377,7 +353,7 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
               <Beaker className="size-5" strokeWidth={1.8} />
             </span>
-            <div className="flex flex-col">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <span className="text-xl font-semibold text-neutral-900">{doc.labResults.length}</span>
               <span className="type-overline text-neutral-500">LAB RESULTS EXTRACTED</span>
             </div>
@@ -386,7 +362,7 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-risk-high-bg text-risk-high">
               <ShieldAlert className="size-5" strokeWidth={1.8} />
             </span>
-            <div className="flex flex-col">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <span className="text-xl font-semibold text-neutral-900">{doc.allergies.length}</span>
               <span className="type-overline text-neutral-500">ALLERGIES RECORDED</span>
             </div>
@@ -395,7 +371,7 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700">
               <Activity className="size-5" strokeWidth={1.8} />
             </span>
-            <div className="flex flex-col">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <span className="text-xl font-semibold text-neutral-900">{doc.events.length}</span>
               <span className="type-overline text-neutral-500">TIMELINE EVENTS</span>
             </div>
@@ -409,31 +385,33 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
             <table className="w-full min-w-[700px] border-collapse text-left">
               <thead>
                 <tr className="bg-neutral-50">
-                  <th className="type-overline px-[18px] py-3 text-neutral-500">MEDICATION</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">DOSAGE</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">FREQUENCY</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">INSTRUCTIONS</th>
+                  <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">MEDICATION</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">DOSAGE</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">FREQUENCY</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">INSTRUCTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {doc.medications.map((m) => (
-                  <tr key={m.id} className="border-t border-neutral-200 hover:bg-neutral-50">
-                    <td className="px-[18px] py-3">
-                      <div className="flex flex-col">
-                        <span className="text-[13px] font-semibold text-neutral-900">{m.name}</span>
+                  <tr key={m.id} className="border-t border-neutral-200 transition-colors hover:bg-neutral-50">
+                    <td className="px-[18px] py-3 align-middle">
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="text-[13px] leading-[18px] font-semibold text-neutral-900">
+                          {m.name}
+                        </span>
                         {m.genericName && (
-                          <span className="text-xs text-neutral-500">{m.genericName}</span>
+                          <span className="text-xs leading-4 text-neutral-500">{m.genericName}</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-[13px] text-neutral-700">{m.dosage || "—"}</td>
-                    <td className="px-3 py-3 text-[13px] text-neutral-700">{m.frequency || "—"}</td>
-                    <td className="px-3 py-3 text-[13px] text-neutral-600">{m.instructions || "—"}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] text-neutral-700">{m.dosage || "—"}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] text-neutral-700">{m.frequency || "—"}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] text-neutral-600">{m.instructions || "—"}</td>
                   </tr>
                 ))}
                 {doc.medications.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-sm text-neutral-500">
+                    <td colSpan={4} className="border-t border-neutral-200 px-[18px] py-12 text-center text-sm leading-[21px] text-neutral-500">
                       No prescriptions extracted from this document.
                     </td>
                   </tr>
@@ -450,28 +428,28 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
             <table className="w-full min-w-[700px] border-collapse text-left">
               <thead>
                 <tr className="bg-neutral-50">
-                  <th className="type-overline px-[18px] py-3 text-neutral-500">TEST NAME</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">VALUE / RESULT</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">REFERENCE RANGE</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">DATE</th>
+                  <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">TEST NAME</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">VALUE / RESULT</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">REFERENCE RANGE</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">DATE</th>
                 </tr>
               </thead>
               <tbody>
                 {doc.labResults.map((l) => (
-                  <tr key={l.id} className="border-t border-neutral-200 hover:bg-neutral-50">
-                    <td className="px-[18px] py-3 text-[13px] font-semibold text-neutral-900">
+                  <tr key={l.id} className="border-t border-neutral-200 transition-colors hover:bg-neutral-50">
+                    <td className="px-[18px] py-3 align-middle text-[13px] leading-[19px] font-semibold text-neutral-900">
                       {l.name}
                     </td>
-                    <td className="px-3 py-3 text-[13px] font-medium text-neutral-800">
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] font-medium text-neutral-800">
                       {l.latestValueLabel || l.latestValue} {l.unit}
                     </td>
-                    <td className="px-3 py-3 text-[13px] text-neutral-500">{l.referenceRange || "—"}</td>
-                    <td className="px-3 py-3 text-[13px] text-neutral-500">{l.latestDate}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] text-neutral-500">{l.referenceRange || "—"}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] text-neutral-500">{l.latestDate}</td>
                   </tr>
                 ))}
                 {doc.labResults.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-sm text-neutral-500">
+                    <td colSpan={4} className="border-t border-neutral-200 px-[18px] py-12 text-center text-sm leading-[21px] text-neutral-500">
                       No lab results extracted from this document.
                     </td>
                   </tr>
@@ -488,24 +466,26 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
             <table className="w-full min-w-[700px] border-collapse text-left">
               <thead>
                 <tr className="bg-neutral-50">
-                  <th className="type-overline px-[18px] py-3 text-neutral-500">ALLERGEN</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">REACTION</th>
-                  <th className="type-overline px-3 py-3 text-neutral-500">SEVERITY</th>
+                  <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">ALLERGEN</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">REACTION</th>
+                  <th className="type-overline px-3 py-3 align-middle whitespace-nowrap text-neutral-500">SEVERITY</th>
                 </tr>
               </thead>
               <tbody>
                 {doc.allergies.map((a) => (
-                  <tr key={a.id} className="border-t border-neutral-200 hover:bg-neutral-50">
-                    <td className="px-[18px] py-3 text-[13px] font-semibold text-neutral-900">
+                  <tr key={a.id} className="border-t border-neutral-200 transition-colors hover:bg-neutral-50">
+                    <td className="px-[18px] py-3 align-middle text-[13px] leading-[19px] font-semibold text-neutral-900">
                       {a.medicationName}
                     </td>
-                    <td className="px-3 py-3 text-[13px] text-neutral-700">{a.reaction || "Reported allergy"}</td>
-                    <td className="px-3 py-3 text-[13px] capitalize font-medium text-risk-high">{a.severity || "Moderate"}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] text-neutral-700">{a.reaction || "Reported allergy"}</td>
+                    <td className="px-3 py-3 align-middle text-[13px] leading-[19px] font-medium capitalize text-risk-high">
+                      {a.severity || "Moderate"}
+                    </td>
                   </tr>
                 ))}
                 {doc.allergies.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-sm text-neutral-500">
+                    <td colSpan={3} className="border-t border-neutral-200 px-[18px] py-12 text-center text-sm leading-[21px] text-neutral-500">
                       No drug allergies recorded in this document.
                     </td>
                   </tr>
@@ -517,18 +497,18 @@ export function DocumentDetailView({ documentId }: { documentId: string }) {
       )}
 
       {activeTab === "events" && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3.5">
           {doc.events.map((e) => (
-            <div key={e.id} className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-4 shadow-card">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-neutral-900">{e.title}</span>
-                <span className="text-xs text-neutral-500">{e.date}</span>
+            <div key={e.id} className="flex flex-col gap-1.5 rounded-xl border border-neutral-200 bg-neutral-0 p-4 shadow-card">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm leading-5 font-semibold text-neutral-900">{e.title}</span>
+                <span className="shrink-0 text-xs leading-4 font-medium text-neutral-500">{e.date}</span>
               </div>
-              <p className="text-[13px] text-neutral-700">{e.summary}</p>
+              <p className="text-[13px] leading-[19px] text-neutral-700">{e.summary}</p>
             </div>
           ))}
           {doc.events.length === 0 && (
-            <div className="rounded-xl border border-neutral-200 bg-neutral-0 py-8 text-center text-sm text-neutral-500">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-0 px-6 py-12 text-center text-sm leading-[21px] text-neutral-500 shadow-card">
               No timeline events recorded from this document.
             </div>
           )}

@@ -88,7 +88,7 @@ function ProviderCard({
     <article
       onClick={() => onSelect?.(provider.id)}
       className={cn(
-        "flex w-full flex-col gap-2.5 rounded-[11px] border px-[15px] py-[13px] transition-all cursor-pointer",
+        "flex w-full cursor-pointer flex-col gap-2.5 rounded-[11px] border px-[15px] py-[13px] transition-colors",
         isSelected
           ? "border-brand-500 bg-brand-50/80 ring-2 ring-brand-600 shadow-sm"
           : top
@@ -110,7 +110,7 @@ function ProviderCard({
             {provider.name}
           </span>
           <span className="flex flex-wrap items-center gap-[7px]">
-            <span className="type-overline rounded-[5px] bg-neutral-100 px-[7px] py-0.5 text-neutral-600">
+            <span className="type-overline inline-flex shrink-0 items-center rounded-[5px] bg-neutral-100 px-[7px] py-[3px] whitespace-nowrap text-neutral-600">
               {kindLabel}
             </span>
             <span className="text-xs leading-4 font-medium text-neutral-500">
@@ -190,7 +190,7 @@ function ProviderCard({
                 onSelect?.(provider.id);
               }}
               className={cn(
-                "rounded-[7px] border px-[13px] py-2 text-xs leading-4 font-semibold transition-colors",
+                "inline-flex cursor-pointer items-center rounded-[7px] border px-[13px] py-2 text-xs leading-4 font-semibold whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-brand-700/25",
                 isSelected
                   ? "border-brand-600 bg-brand-700 text-white hover:bg-brand-800"
                   : "border-neutral-300 bg-neutral-0 text-neutral-700 hover:bg-neutral-50"
@@ -203,7 +203,7 @@ function ProviderCard({
               target="_blank"
               rel="noreferrer noopener"
               onClick={(e) => e.stopPropagation()}
-              className="rounded-[7px] border border-neutral-300 bg-neutral-0 px-[13px] py-2 text-xs leading-4 font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+              className="inline-flex items-center rounded-[7px] border border-neutral-300 bg-neutral-0 px-[13px] py-2 text-xs leading-4 font-semibold whitespace-nowrap text-neutral-700 outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-3 focus-visible:ring-brand-700/25"
             >
               Directions
             </a>

@@ -38,7 +38,7 @@ export function FilterChips({
             onClick={() => onChange(chip.value)}
             className={cn(
               // Figma chip is 34px tall either way — the border eats 2px of the padding.
-              "cursor-pointer rounded-full px-3.5 text-[13px] leading-[18px] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-brand-700/25",
+              "inline-flex cursor-pointer items-center rounded-full px-3.5 text-[13px] leading-[18px] font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-brand-700/25",
               active
                 ? "bg-sidebar-active-bg py-2 text-sidebar-active-ink"
                 : "border border-neutral-200 bg-neutral-0 py-[7px] text-neutral-600 hover:bg-neutral-50"

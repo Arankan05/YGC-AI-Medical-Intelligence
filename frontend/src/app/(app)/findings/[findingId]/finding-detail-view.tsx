@@ -73,7 +73,7 @@ export function FindingDetailView({ finding }: { finding: Finding }) {
       </div>
 
       {/* columns (29:871) */}
-      <div className="flex w-full flex-1 flex-col gap-4 xl:flex-row xl:items-stretch">
+      <div className="flex w-full flex-1 flex-col gap-3.5 xl:flex-row xl:items-stretch">
         <div className="flex w-full min-w-0 flex-1 flex-col gap-[13px]">
           <Panel>
             <PanelHeader title="What we found" className="py-[11px]" />
@@ -156,7 +156,7 @@ export function FindingDetailView({ finding }: { finding: Finding }) {
                     <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                       <span
                         className={cn(
-                          "type-overline w-fit rounded-[5px] px-[7px] py-0.5",
+                          "type-overline inline-flex w-fit items-center rounded-[5px] px-[7px] py-[3px] whitespace-nowrap",
                           ai
                             ? "bg-brand-50 text-brand-800"
                             : "bg-neutral-100 text-neutral-600"

@@ -42,24 +42,24 @@ function DocumentExtractionCard({ analysis }: { analysis: AIAnalysisRecord }) {
       <div className="flex flex-col gap-3.5">
         {/* Top Bar */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3">
-          <div className="flex items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-700">
               <Sparkles className="size-4" strokeWidth={1.8} />
             </span>
-            <div>
-              <h3 className="text-sm font-semibold text-neutral-900">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h3 className="truncate text-sm leading-5 font-semibold text-neutral-900">
                 {analysis.analysisType.replace(/_/g, " ").toUpperCase()}
               </h3>
               {docType && (
-                <span className="text-xs text-neutral-500">
+                <span className="truncate text-xs leading-4 text-neutral-500">
                   Document Type: {docType.replace(/_/g, " ")}
                 </span>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {analysis.confidence !== undefined && (
-              <span className="rounded-full bg-brand-50 border border-brand-200 px-2.5 py-0.5 text-xs font-semibold text-brand-700">
+              <span className="inline-flex shrink-0 items-center rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs leading-4 font-semibold whitespace-nowrap text-brand-700">
                 {analysis.confidence}% Confidence
               </span>
             )}
@@ -81,7 +81,7 @@ function DocumentExtractionCard({ analysis }: { analysis: AIAnalysisRecord }) {
 
         {/* Extracted Entity Counts */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <div className="flex flex-col rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+          <div className="flex flex-col gap-0.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
             <span className="type-overline text-neutral-500">
               MEDICATIONS
             </span>
@@ -89,7 +89,7 @@ function DocumentExtractionCard({ analysis }: { analysis: AIAnalysisRecord }) {
               {medsCount}
             </span>
           </div>
-          <div className="flex flex-col rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+          <div className="flex flex-col gap-0.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
             <span className="type-overline text-neutral-500">
               FINDINGS
             </span>
@@ -97,7 +97,7 @@ function DocumentExtractionCard({ analysis }: { analysis: AIAnalysisRecord }) {
               {findingsCount}
             </span>
           </div>
-          <div className="flex flex-col rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+          <div className="flex flex-col gap-0.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
             <span className="type-overline text-neutral-500">
               LAB TESTS
             </span>
@@ -105,7 +105,7 @@ function DocumentExtractionCard({ analysis }: { analysis: AIAnalysisRecord }) {
               {labsCount}
             </span>
           </div>
-          <div className="flex flex-col rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+          <div className="flex flex-col gap-0.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
             <span className="type-overline text-neutral-500">
               EVENTS
             </span>
@@ -132,22 +132,22 @@ function QACard({ analysis }: { analysis: AIAnalysisRecord }) {
       <div className="flex flex-col gap-3.5">
         {/* Top Bar */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3">
-          <div className="flex items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-700">
               <MessageSquare className="size-4" strokeWidth={1.8} />
             </span>
-            <div>
-              <h3 className="text-sm font-semibold text-neutral-900">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h3 className="truncate text-sm leading-5 font-semibold text-neutral-900">
                 MEDICAL QA
               </h3>
-              <span className="text-xs text-neutral-500">
+              <span className="truncate text-xs leading-4 text-neutral-500">
                 Interactive Assistant Query
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {analysis.confidence !== undefined && (
-              <span className="rounded-full bg-brand-50 border border-brand-200 px-2.5 py-0.5 text-xs font-semibold text-brand-700">
+              <span className="inline-flex shrink-0 items-center rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs leading-4 font-semibold whitespace-nowrap text-brand-700">
                 {analysis.confidence}% Confidence
               </span>
             )}
@@ -248,9 +248,9 @@ export function AnalysesView() {
   return (
     <div className="flex w-full flex-col gap-[18px] px-4 py-[22px] md:px-[26px]">
       {/* Header banner */}
-      <div className="flex w-full flex-col gap-2.5 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-sm">
+      <div className="flex w-full flex-col gap-2.5 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-card">
         <div className="flex items-center gap-2">
-          <Brain className="size-4 text-brand-700" />
+          <Brain className="size-4 shrink-0 text-brand-700" />
           <h3 className="text-sm font-semibold text-brand-900">
             AI Medical Intelligence Logs
           </h3>
@@ -263,9 +263,9 @@ export function AnalysesView() {
       {error && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          <span>{error}</span>
+          <span className="min-w-0 flex-1">{error}</span>
           <Button
             size="sm"
             variant="outline"
@@ -278,7 +278,7 @@ export function AnalysesView() {
       )}
 
       {/* Analyses List */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3.5">
         {loading && (
           <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-0 py-16 text-center shadow-card">
             <Loader2 className="size-5 animate-spin text-brand-600" />
@@ -295,13 +295,13 @@ export function AnalysesView() {
           })}
 
         {!loading && analyses.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-neutral-200 bg-neutral-0 py-16 text-center shadow-card">
-            <p className="text-sm leading-5 text-neutral-600">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-0 px-6 py-16 text-center shadow-card">
+            <p className="max-w-md text-sm leading-5 text-neutral-600">
               No AI analysis logs found. Upload and extract medical records to see AI reasoning logs here.
             </p>
             <Link
               href="/documents/upload"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-700 hover:underline"
+              className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
             >
               <Upload className="size-3.5" />
               Upload medical documents

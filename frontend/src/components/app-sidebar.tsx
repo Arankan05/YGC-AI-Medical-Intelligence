@@ -150,7 +150,7 @@ export function AppSidebar({
           disabled={signingOut}
           title="Sign out"
           aria-label="Sign out"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-neutral-200/60 bg-white/80 text-neutral-600 transition-colors hover:border-risk-high-border hover:bg-risk-high-bg hover:text-risk-high"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-neutral-200/60 bg-white/80 text-neutral-600 outline-none transition-colors hover:border-risk-high-border hover:bg-risk-high-bg hover:text-risk-high focus-visible:ring-3 focus-visible:ring-brand-700/25 disabled:opacity-60"
         >
           {signingOut ? (
             <Loader2 className="size-4 animate-spin" />

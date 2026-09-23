@@ -46,7 +46,7 @@ function StatusBadge({ status }: { status: LabStatus }) {
   const s = STATUS_STYLES[status];
   return (
     <span
-      className={`type-overline rounded-full px-2 py-0.5 ${s.wrap} ${s.text}`}
+      className={`type-overline inline-flex shrink-0 items-center rounded-full px-2 py-[3px] align-middle whitespace-nowrap ${s.wrap} ${s.text}`}
       title={
         status === "UNKNOWN"
           ? "This result could not be classified against a reference range."
@@ -126,22 +126,22 @@ export function LabResultsView() {
           <table className="w-full min-w-[1040px] border-collapse text-left">
             <thead>
               <tr className="bg-neutral-50">
-                <th className="type-overline px-[18px] py-3 text-neutral-500">
+                <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">
                   TEST NAME
                 </th>
-                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   LATEST VALUE
                 </th>
-                <th className="type-overline w-[160px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[160px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   REFERENCE RANGE
                 </th>
-                <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[130px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   DATE
                 </th>
-                <th className="type-overline w-[150px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[150px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   TREND
                 </th>
-                <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[130px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   STATUS
                 </th>
               </tr>
@@ -161,12 +161,12 @@ export function LabResultsView() {
               {!loading && error && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={6} className="px-[18px] py-12 text-center">
-                    <div className="flex flex-col items-center gap-1.5">
+                    <div className="mx-auto flex max-w-md flex-col items-center gap-2">
                       <AlertCircle className="size-5 text-risk-high" strokeWidth={1.8} />
-                      <p className="text-sm leading-5 font-medium text-neutral-900">
+                      <p className="text-sm leading-5 font-semibold text-neutral-900">
                         Lab intelligence is unavailable
                       </p>
-                      <p className="mx-auto max-w-md text-[13px] leading-[18px] text-neutral-600">
+                      <p className="text-[13px] leading-[19px] text-neutral-600">
                         {error} No laboratory conclusions are shown while the
                         analysis cannot be reached.
                       </p>
@@ -182,12 +182,12 @@ export function LabResultsView() {
                   return (
                     <Fragment key={result.id}>
                       <tr className="border-t border-neutral-200 transition-colors hover:bg-neutral-50">
-                        <td className="px-[18px] py-[13px]">
+                        <td className="px-[18px] py-[13px] align-middle">
                           <button
                             type="button"
                             onClick={() => setExpanded(isOpen ? null : result.id)}
                             aria-expanded={isOpen}
-                            className="flex items-center gap-1.5 text-left text-sm font-medium text-neutral-900 hover:text-brand-700"
+                            className="flex cursor-pointer items-center gap-1.5 rounded text-left text-sm font-medium text-neutral-900 outline-none transition-colors hover:text-brand-700 focus-visible:ring-3 focus-visible:ring-brand-700/25"
                           >
                             {isOpen ? (
                               <ChevronDown className="size-3.5 shrink-0" />
@@ -201,22 +201,22 @@ export function LabResultsView() {
                             </span>
                           </button>
                         </td>
-                        <td className="py-[13px] text-[13px] text-neutral-700">
+                        <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-700">
                           {/* Exactly what the lab reported. A censored "<0.01"
                               is shown as written, never as a number. */}
                           {result.latestValueLabel}
                           {result.unit ? ` ${result.unit}` : ""}
                         </td>
-                        <td className="py-[13px] text-[13px] text-neutral-500">
+                        <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-500">
                           {result.referenceRange}
                         </td>
-                        <td className="py-[13px] text-[13px] text-neutral-500">
+                        <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-500">
                           {result.latestDate}
                         </td>
-                        <td className={`py-[13px] text-[13px] ${TREND_TEXT[result.trend]}`}>
+                        <td className={`py-[13px] align-middle text-[13px] leading-[19px] ${TREND_TEXT[result.trend]}`}>
                           {LAB_TREND_LABELS[result.trend]}
                         </td>
-                        <td className="py-[13px]">
+                        <td className="py-[13px] align-middle">
                           <StatusBadge status={result.status} />
                         </td>
                       </tr>
@@ -280,20 +280,22 @@ export function LabResultsView() {
               {!loading && !error && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={6} className="px-[18px] py-12 text-center">
-                    <p className="text-sm leading-[21px] text-neutral-600">
-                      {results.length === 0
-                        ? "No lab results found. Upload a lab report to automatically extract and trend biomarker values."
-                        : "No lab tests match this filter."}
-                    </p>
-                    {results.length === 0 && (
-                      <Link
-                        href="/documents/upload"
-                        className="mt-2 inline-flex items-center gap-1.5 text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
-                      >
-                        <Upload className="size-3.5" />
-                        Upload lab report
-                      </Link>
-                    )}
+                    <div className="mx-auto flex max-w-md flex-col items-center gap-2">
+                      <p className="text-sm leading-[21px] text-neutral-600">
+                        {results.length === 0
+                          ? "No lab results found. Upload a lab report to automatically extract and trend biomarker values."
+                          : "No lab tests match this filter."}
+                      </p>
+                      {results.length === 0 && (
+                        <Link
+                          href="/documents/upload"
+                          className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
+                        >
+                          <Upload className="size-3.5" />
+                          Upload lab report
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}

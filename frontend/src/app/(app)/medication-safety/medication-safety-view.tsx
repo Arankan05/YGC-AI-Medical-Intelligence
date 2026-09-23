@@ -157,7 +157,7 @@ export function MedicationSafetyView() {
           role="alert"
           className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          <span>{error}</span>
+          <span className="min-w-0 flex-1">{error}</span>
           <Button
             size="sm"
             variant="outline"
@@ -208,7 +208,7 @@ export function MedicationSafetyView() {
                   strokeWidth={1.8}
                 />
               </span>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
                   {count}
                 </span>
@@ -245,7 +245,7 @@ export function MedicationSafetyView() {
                     <RiskBadge risk={issue.risk} />
                     <FlagChip flag={issue.kind} />
                   </div>
-                  <span className="text-xs leading-4 text-neutral-500">
+                  <span className="shrink-0 text-xs leading-4 font-medium text-neutral-500">
                     Confidence {confidencePct}%
                   </span>
                 </div>
@@ -262,7 +262,7 @@ export function MedicationSafetyView() {
                     {issue.medications.map((medication) => (
                       <span
                         key={medication}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-[3px] text-xs leading-4 font-medium text-neutral-700"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-[3px] text-xs leading-4 font-medium whitespace-nowrap text-neutral-700"
                       >
                         <Pill className="size-3" strokeWidth={1.8} />
                         {medication}
@@ -288,12 +288,12 @@ export function MedicationSafetyView() {
           })}
 
         {showAllClear && (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-status-ok-border bg-status-ok-bg py-16 text-center">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-status-ok-border bg-status-ok-bg px-6 py-16 text-center">
             <CheckCircle2 className="size-6 text-status-ok" strokeWidth={1.8} />
             <p className="text-sm leading-5 font-semibold text-status-ok">
               No safety issues detected
             </p>
-            <p className="max-w-[520px] text-[13px] leading-[19px] text-neutral-600">
+            <p className="max-w-md text-[13px] leading-[19px] text-neutral-600">
               Your {report?.activeMedicationCount} active{" "}
               {report?.activeMedicationCount === 1 ? "medication was" : "medications were"}{" "}
               checked for allergy contradictions, drug interactions, duplicate therapy
@@ -303,14 +303,14 @@ export function MedicationSafetyView() {
         )}
 
         {showEmptyRecords && (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-neutral-200 bg-neutral-0 py-16 text-center shadow-card">
-            <p className="max-w-[520px] text-sm leading-5 text-neutral-600">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-0 px-6 py-16 text-center shadow-card">
+            <p className="max-w-md text-sm leading-5 text-neutral-600">
               No active medications to check yet. Safety checks run automatically once
               prescriptions are extracted from your uploaded medical records.
             </p>
             <Link
               href="/documents/upload"
-              className="inline-flex items-center gap-1.5 text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
+              className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
             >
               <Upload className="size-3.5" />
               Upload prescriptions or notes
@@ -319,8 +319,8 @@ export function MedicationSafetyView() {
         )}
 
         {!loading && issues.length > 0 && rows.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-0 py-16 text-center shadow-card">
-            <p className="text-sm leading-5 text-neutral-600">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-0 px-6 py-16 text-center shadow-card">
+            <p className="max-w-md text-sm leading-5 text-neutral-600">
               No safety issues match this risk filter.
             </p>
           </div>

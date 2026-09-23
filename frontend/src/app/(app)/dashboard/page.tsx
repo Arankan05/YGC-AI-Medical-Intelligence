@@ -111,14 +111,14 @@ export default function DashboardPage() {
 
         {/* AI Medical Summary Banner */}
         {overview?.latestSummary && (
-          <div className="flex w-full flex-col gap-2.5 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
+          <div className="flex w-full flex-col gap-2.5 rounded-xl border border-brand-200 bg-brand-50/70 p-4 shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Sparkles className="size-4 text-brand-700" />
+                <Sparkles className="size-4 shrink-0 text-brand-700" />
                 <h3 className="text-sm font-semibold text-brand-900">AI-Extracted Clinical Summary</h3>
               </div>
               {overview.confidenceScore !== undefined && (
-                <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-800">
+                <span className="inline-flex shrink-0 items-center rounded-full bg-brand-100 px-2.5 py-1 text-xs leading-4 font-semibold whitespace-nowrap text-brand-800">
                   Confidence: {Math.round(overview.confidenceScore <= 1 ? overview.confidenceScore * 100 : overview.confidenceScore)}%
                 </span>
               )}
@@ -133,9 +133,9 @@ export default function DashboardPage() {
         )}
 
         {/* Main 2-Column Clinical Layout */}
-        <div className="flex w-full flex-1 flex-col gap-4 xl:flex-row xl:items-stretch">
+        <div className="flex w-full flex-1 flex-col gap-3.5 xl:flex-row xl:items-stretch">
           {/* Left Column: Priority Findings, Allergies Alert, and Lab Results */}
-          <div className="flex w-full min-w-0 flex-1 flex-col gap-4">
+          <div className="flex w-full min-w-0 flex-1 flex-col gap-3.5">
             {/* Priority AI Findings */}
             <Panel>
               <PanelHeader
@@ -153,8 +153,8 @@ export default function DashboardPage() {
               />
               <div className="flex flex-col gap-3 px-[18px] py-4">
                 {findings.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                    <p className="text-sm leading-5 text-neutral-600">
+                  <div className="flex flex-col items-center justify-center gap-2 px-2 py-8 text-center">
+                    <p className="max-w-md text-sm leading-5 text-neutral-600">
                       No AI findings detected yet. Upload medical documents to begin contradiction analysis.
                     </p>
                     <Link
@@ -213,19 +213,23 @@ export default function DashboardPage() {
                     </Link>
                   }
                 />
-                <div className="flex flex-col divide-y divide-neutral-100 px-4 py-2">
+                <div className="flex flex-col divide-y divide-neutral-100 px-[18px] py-1.5">
                   {allergies.slice(0, 3).map((al) => (
-                    <div key={al.id} className="flex items-center justify-between py-2.5">
-                      <div className="flex items-center gap-2.5">
+                    <div key={al.id} className="flex items-center justify-between gap-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <span className="flex size-7 shrink-0 items-center justify-center rounded bg-risk-high-bg text-risk-high">
                           <ShieldAlert className="size-3.5" />
                         </span>
-                        <div className="flex flex-col">
-                          <span className="text-[13px] font-semibold text-neutral-900">{al.medicationName}</span>
-                          <span className="text-xs text-neutral-500">{al.reaction || "Reported reaction"}</span>
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-[13px] leading-[18px] font-semibold text-neutral-900">
+                            {al.medicationName}
+                          </span>
+                          <span className="truncate text-xs leading-4 text-neutral-500">
+                            {al.reaction || "Reported reaction"}
+                          </span>
                         </div>
                       </div>
-                      <span className="type-overline rounded-full bg-risk-high-bg px-2 py-0.5 text-risk-high">
+                      <span className="type-overline inline-flex shrink-0 items-center rounded-full bg-risk-high-bg px-2 py-[3px] whitespace-nowrap text-risk-high">
                         {al.severity || "Moderate"}
                       </span>
                     </div>
@@ -249,8 +253,8 @@ export default function DashboardPage() {
               />
               <div className="flex flex-col gap-3 px-[18px] py-4">
                 {labs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                    <p className="text-sm leading-5 text-neutral-600">
+                  <div className="flex flex-col items-center justify-center gap-2 px-2 py-8 text-center">
+                    <p className="max-w-md text-sm leading-5 text-neutral-600">
                       No lab trends available yet. Lab results will be trended across time as reports are uploaded.
                     </p>
                     <Link
@@ -268,9 +272,9 @@ export default function DashboardPage() {
                         key={lab.id}
                         className="flex flex-col gap-1 rounded-lg border border-neutral-200 bg-neutral-50 p-3"
                       >
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-xs font-semibold text-neutral-900 truncate">{lab.name}</span>
-                          <span className="text-[11px] text-neutral-500">{lab.latestDate}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-xs font-semibold text-neutral-900">{lab.name}</span>
+                          <span className="shrink-0 text-[11px] text-neutral-500">{lab.latestDate}</span>
                         </div>
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-base font-bold text-neutral-900">
@@ -296,7 +300,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Column: Recent Activity & Active Medications */}
-          <div className="flex w-full flex-col gap-4 xl:w-[340px] xl:shrink-0">
+          <div className="flex w-full flex-col gap-3.5 xl:w-[340px] xl:shrink-0">
             {/* Recent activity & Timeline */}
             <Panel className="flex-1">
               <PanelHeader
@@ -310,7 +314,7 @@ export default function DashboardPage() {
                   </Link>
                 }
               />
-              <div className="flex flex-col gap-[13px] px-4 py-3.5">
+              <div className="flex flex-col gap-[13px] px-[18px] py-4">
                 {documents.length === 0 && timeline.length === 0 ? (
                   <p className="py-6 text-center text-[13px] leading-[19px] text-neutral-500">
                     No recent activity recorded yet.
@@ -352,7 +356,7 @@ export default function DashboardPage() {
                   </Link>
                 }
               />
-              <div className="flex flex-col gap-[11px] px-4 py-3.5">
+              <div className="flex flex-col gap-[11px] px-[18px] py-4">
                 {medications.length === 0 ? (
                   <p className="py-6 text-center text-[13px] leading-[19px] text-neutral-500">
                     No active medications recorded yet.

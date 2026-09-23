@@ -33,11 +33,11 @@ function SeverityBadge({ severity }: { severity?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
+        "type-overline inline-flex shrink-0 items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-2 whitespace-nowrap uppercase align-middle",
         pillClass
       )}
     >
-      <span className={cn("size-1.5 rounded-full", dotClass)} />
+      <span className={cn("size-1.5 shrink-0 rounded-full", dotClass)} />
       {severity || "Moderate"}
     </span>
   );
@@ -101,9 +101,9 @@ export function AllergiesView() {
       {error && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          <span>{error}</span>
+          <span className="min-w-0 flex-1">{error}</span>
           <Button
             size="sm"
             variant="outline"
@@ -121,19 +121,19 @@ export function AllergiesView() {
           <table className="w-full min-w-[860px] border-collapse text-left">
             <thead>
               <tr className="bg-neutral-50">
-                <th className="type-overline px-[18px] py-3 text-neutral-500">
+                <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">
                   ALLERGEN / SUBSTANCE
                 </th>
-                <th className="type-overline w-[160px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[160px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   NORMALIZED INGREDIENT
                 </th>
-                <th className="type-overline w-[220px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[220px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   REACTION / SYMPTOMS
                 </th>
-                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   SEVERITY
                 </th>
-                <th className="type-overline w-[140px] px-3 py-3 text-right text-neutral-500">
+                <th className="type-overline w-[140px] px-3 py-3 text-right align-middle whitespace-nowrap text-neutral-500">
                   RECORDED DATE
                 </th>
               </tr>
@@ -156,33 +156,33 @@ export function AllergiesView() {
                     key={allergy.id}
                     className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
                   >
-                    <td className="px-[18px] py-[13px]">
+                    <td className="px-[18px] py-[13px] align-middle">
                       <div className="flex items-center gap-3">
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-risk-high-bg text-risk-high">
                           <ShieldAlert className="size-[16px]" strokeWidth={1.8} />
                         </span>
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex min-w-0 flex-col gap-0.5">
                           <span className="text-[13px] leading-[18px] font-semibold text-neutral-900">
                             {allergy.medicationName}
                           </span>
                           {allergy.sourceDocumentName && (
-                            <span className="text-xs text-neutral-500">
+                            <span className="truncate text-xs leading-4 text-neutral-500">
                               Source: {allergy.sourceDocumentName}
                             </span>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="py-[13px] text-[13px] text-neutral-600">
+                    <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-600">
                       {allergy.normalizedMedicationName || allergy.medicationName}
                     </td>
-                    <td className="py-[13px] text-[13px] text-neutral-700">
+                    <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-700">
                       {allergy.reaction || "Adverse clinical reaction reported"}
                     </td>
-                    <td className="py-[13px]">
+                    <td className="py-[13px] align-middle">
                       <SeverityBadge severity={allergy.severity} />
                     </td>
-                    <td className="px-3 py-[13px] text-right text-[13px] text-neutral-500">
+                    <td className="px-3 py-[13px] text-right align-middle text-[13px] leading-[19px] text-neutral-500">
                       {allergy.recordedDate}
                     </td>
                   </tr>
@@ -191,18 +191,20 @@ export function AllergiesView() {
               {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={5} className="px-[18px] py-12 text-center">
-                    <p className="text-sm leading-[21px] text-neutral-600">
-                      {filter === "all"
-                        ? "No known drug allergies recorded. Document extraction will automatically flag and track allergies from your records."
-                        : "No allergies match this severity filter."}
-                    </p>
-                    <Link
-                      href="/documents/upload"
-                      className="mt-2 inline-flex items-center gap-1.5 text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
-                    >
-                      <Upload className="size-3.5" />
-                      Upload medical documents
-                    </Link>
+                    <div className="mx-auto flex max-w-md flex-col items-center gap-2">
+                      <p className="text-sm leading-[21px] text-neutral-600">
+                        {filter === "all"
+                          ? "No known drug allergies recorded. Document extraction will automatically flag and track allergies from your records."
+                          : "No allergies match this severity filter."}
+                      </p>
+                      <Link
+                        href="/documents/upload"
+                        className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
+                      >
+                        <Upload className="size-3.5" />
+                        Upload medical documents
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               )}

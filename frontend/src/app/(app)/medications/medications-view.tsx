@@ -165,7 +165,7 @@ export function MedicationsView() {
                   strokeWidth={1.8}
                 />
               </span>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-lg leading-[26px] font-semibold tracking-[-0.2px] text-neutral-900">
                   {count}
                 </span>
@@ -184,22 +184,22 @@ export function MedicationsView() {
           <table className="w-full min-w-[960px] border-collapse text-left">
             <thead>
               <tr className="bg-neutral-50">
-                <th className="type-overline px-[18px] py-3 text-neutral-500">
+                <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">
                   MEDICATION
                 </th>
-                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   DOSAGE
                 </th>
-                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   FREQUENCY
                 </th>
-                <th className="type-overline w-[170px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[170px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   PRESCRIBER
                 </th>
-                <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[130px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   PRESCRIBED
                 </th>
-                <th className="type-overline w-[190px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[190px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   SAFETY FLAGS
                 </th>
               </tr>
@@ -222,12 +222,12 @@ export function MedicationsView() {
                     key={medication.id}
                     className="border-t border-neutral-200 transition-colors hover:bg-neutral-50"
                   >
-                    <td className="px-[18px] py-[13px]">
+                    <td className="px-[18px] py-[13px] align-middle">
                       <div className="flex items-center gap-3">
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
                           <Pill className="size-[15px] text-brand-700" strokeWidth={1.8} />
                         </span>
-                        <span className="flex flex-col gap-0.5">
+                        <span className="flex min-w-0 flex-col gap-0.5">
                           <span className="text-[13px] leading-[18px] font-medium text-neutral-800">
                             {medication.name}
                           </span>
@@ -238,25 +238,25 @@ export function MedicationsView() {
                         </span>
                       </div>
                     </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                    <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-600">
                       {medication.dosage}
                     </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                    <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-600">
                       {medication.frequency}
                     </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                    <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-600">
                       {medication.prescribedBy}
                     </td>
-                    <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
+                    <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-500">
                       {medication.startedOn}
                     </td>
-                    <td className="py-[13px] pr-[18px]">
-                      <div className="flex flex-wrap gap-1.5">
+                    <td className="py-[13px] pr-[18px] align-middle">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {medication.flags.map((flag) => (
                           <FlagChip key={flag} flag={flag} />
                         ))}
                         {medication.flags.length === 0 && (
-                          <span className="type-overline rounded-full bg-status-ok-bg px-2 py-0.5 text-status-ok">
+                          <span className="type-overline inline-flex shrink-0 items-center rounded-full bg-status-ok-bg px-2 py-[3px] whitespace-nowrap text-status-ok">
                             NO CONFLICTS
                           </span>
                         )}
@@ -268,16 +268,18 @@ export function MedicationsView() {
               {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={6} className="px-[18px] py-12 text-center">
-                    <p className="text-sm leading-[21px] text-neutral-600">
-                      No medication records found. Medications will appear here once extracted from your uploaded medical records.
-                    </p>
-                    <Link
-                      href="/documents/upload"
-                      className="mt-2 inline-flex items-center gap-1.5 text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
-                    >
-                      <Upload className="size-3.5" />
-                      Upload prescriptions or notes
-                    </Link>
+                    <div className="mx-auto flex max-w-md flex-col items-center gap-2">
+                      <p className="text-sm leading-[21px] text-neutral-600">
+                        No medication records found. Medications will appear here once extracted from your uploaded medical records.
+                      </p>
+                      <Link
+                        href="/documents/upload"
+                        className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
+                      >
+                        <Upload className="size-3.5" />
+                        Upload prescriptions or notes
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               )}

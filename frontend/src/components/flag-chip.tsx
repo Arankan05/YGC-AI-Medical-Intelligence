@@ -29,7 +29,7 @@ export function FlagChip({
   return (
     <span
       className={cn(
-        "type-overline inline-block rounded-full px-2 py-[3px]",
+        "type-overline inline-flex shrink-0 items-center rounded-full px-2 py-[3px] whitespace-nowrap align-middle",
         RISK_CHIP[meta.risk],
         className
       )}

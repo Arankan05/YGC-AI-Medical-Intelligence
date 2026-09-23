@@ -67,7 +67,7 @@ export function AskAiView({
   }
 
   return (
-    <div className="flex min-h-full w-full flex-col gap-4 px-4 py-[22px] md:px-[26px] xl:flex-row xl:items-stretch">
+    <div className="flex min-h-full w-full flex-col gap-3.5 px-4 py-[22px] md:px-[26px] xl:flex-row xl:items-stretch">
       {/* panel · chat (30:940) */}
       <section className="flex w-full min-w-0 flex-1 flex-col rounded-xl border border-neutral-200 bg-neutral-0 shadow-card">
         <div className="flex items-center justify-between gap-3 px-[18px] py-3">
@@ -87,7 +87,7 @@ export function AskAiView({
           <button
             type="button"
             onClick={() => setMessages([])}
-            className="cursor-pointer text-[13px] leading-[18px] font-medium text-neutral-500 transition-colors hover:text-neutral-700"
+            className="shrink-0 cursor-pointer rounded text-[13px] leading-[18px] font-medium text-neutral-500 outline-none transition-colors hover:text-neutral-700 focus-visible:ring-3 focus-visible:ring-brand-700/25"
           >
             Clear conversation
           </button>
@@ -97,7 +97,7 @@ export function AskAiView({
         {/* thread (30:951) */}
         <div className="scrollbar-thin flex max-h-[62vh] min-h-[320px] flex-1 flex-col gap-4 overflow-y-auto p-[18px]">
           {messages.length === 0 && (
-            <p className="py-16 text-center text-sm leading-[21px] text-neutral-500">
+            <p className="mx-auto max-w-md py-16 text-center text-sm leading-[21px] text-neutral-500">
               Ask a question about your uploaded records to start a conversation.
             </p>
           )}
@@ -153,7 +153,7 @@ export function AskAiView({
                           key={suggestion}
                           type="button"
                           onClick={() => setQuestion(suggestion)}
-                          className="flex w-full cursor-pointer items-center gap-[9px] text-left"
+                          className="flex w-full cursor-pointer items-center gap-[9px] rounded text-left outline-none focus-visible:ring-3 focus-visible:ring-brand-700/25"
                         >
                           <ArrowRight
                             className="size-[13px] shrink-0 text-brand-800"
@@ -262,13 +262,13 @@ export function AskAiView({
                 key={suggestion}
                 type="button"
                 onClick={() => setQuestion(suggestion)}
-                className="cursor-pointer rounded-full border border-neutral-200 bg-neutral-0 px-3 py-[7px] text-xs leading-4 font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
+                className="inline-flex cursor-pointer items-center rounded-full border border-neutral-200 bg-neutral-0 px-3 py-[7px] text-xs leading-4 font-medium whitespace-nowrap text-neutral-600 outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-3 focus-visible:ring-brand-700/25"
               >
                 {suggestion}
               </button>
             ))}
           </div>
-          <div className="flex w-full items-center gap-2.5 rounded-[10px] border border-neutral-300 bg-neutral-0 py-2 pr-2 pl-[15px] focus-within:border-brand-700">
+          <div className="flex w-full items-center gap-2.5 rounded-[10px] border border-neutral-300 bg-neutral-0 py-2 pr-2 pl-[15px] transition-colors focus-within:border-brand-700">
             <input
               value={question}
               onChange={(event) => setQuestion(event.target.value)}

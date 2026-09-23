@@ -80,17 +80,19 @@ export function FindingsView() {
               className="flex w-full flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-0 p-4 shadow-card"
             >
               <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <RiskBadge risk={finding.risk} />
-                  <h3 className="text-sm font-semibold text-neutral-900">
+                  <h3 className="text-sm leading-5 font-semibold text-neutral-900">
                     {finding.title}
                   </h3>
                 </div>
-                <span className="text-xs text-neutral-500">{finding.detectedOn}</span>
+                <span className="shrink-0 text-xs leading-4 font-medium text-neutral-500">
+                  {finding.detectedOn}
+                </span>
               </div>
-              <p className="text-sm text-neutral-600">{finding.summary}</p>
+              <p className="text-sm leading-[21px] text-neutral-600">{finding.summary}</p>
               {finding.recommendedAction && (
-                <div className="rounded-lg bg-neutral-50 p-2.5 text-xs text-neutral-700">
+                <div className="rounded-lg bg-neutral-50 p-2.5 text-xs leading-[18px] text-neutral-700">
                   <span className="font-semibold text-neutral-800">Recommendation: </span>
                   {finding.recommendedAction}
                 </div>
@@ -98,7 +100,7 @@ export function FindingsView() {
               <div className="flex justify-end">
                 <Link
                   href={`/findings/${finding.id}`}
-                  className="text-[13px] font-medium text-brand-700 hover:underline"
+                  className="rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
                 >
                   View evidence &nbsp;→
                 </Link>
@@ -107,13 +109,13 @@ export function FindingsView() {
           ))}
 
         {!loading && rows.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-neutral-200 bg-neutral-0 py-16 text-center shadow-card">
-            <p className="text-sm leading-5 text-neutral-600">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-0 px-6 py-16 text-center shadow-card">
+            <p className="max-w-md text-sm leading-5 text-neutral-600">
               No findings detected. Contradictions and safety conflicts will be flagged here as multiple medical records are uploaded.
             </p>
             <Link
               href="/documents/upload"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-700 hover:underline"
+              className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
             >
               <Upload className="size-3.5" />
               Upload medical documents

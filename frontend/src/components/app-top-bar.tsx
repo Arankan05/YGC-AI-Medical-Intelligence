@@ -53,7 +53,7 @@ export function AppTopBar({
           type="button"
           onClick={onOpenNav}
           aria-label="Open navigation"
-          className="flex size-[38px] shrink-0 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 lg:hidden"
+          className="flex size-[38px] shrink-0 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-3 focus-visible:ring-brand-700/25 lg:hidden"
         >
           <Menu className="size-[17px]" strokeWidth={1.8} />
         </button>
@@ -69,7 +69,7 @@ export function AppTopBar({
 
       <div className="flex shrink-0 items-center gap-2.5">
         <form onSubmit={handleSubmit} className="hidden md:block" role="search">
-          <label className="flex h-[38px] w-[220px] items-center gap-[9px] rounded-md border border-neutral-200 bg-neutral-50 px-3 focus-within:border-brand-700 xl:w-[300px]">
+          <label className="flex h-[38px] w-[220px] items-center gap-[9px] rounded-md border border-neutral-200 bg-neutral-50 px-3 transition-colors focus-within:border-brand-700 xl:w-[300px]">
             <Search className="size-4 shrink-0 text-neutral-500" strokeWidth={1.8} />
             <input
               value={query}
@@ -111,7 +111,7 @@ export function AppTopBar({
                     href={`/findings/${finding.id}`}
                     className="flex flex-col gap-1.5 px-4 py-3 transition-colors hover:bg-neutral-50"
                   >
-                    <RiskBadge risk={finding.risk} />
+                    <RiskBadge risk={finding.risk} className="w-fit" />
                     <span className="text-[13px] leading-[18px] font-medium text-neutral-900">
                       {finding.title}
                     </span>
@@ -122,7 +122,7 @@ export function AppTopBar({
                 </li>
               ))}
             </ul>
-            <div className="border-t border-neutral-200 px-4 py-2.5">
+            <div className="border-t border-neutral-200 px-4 py-3">
               <Link
                 href="/findings"
                 className="text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"

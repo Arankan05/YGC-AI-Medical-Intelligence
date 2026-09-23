@@ -163,7 +163,7 @@ export function UploadModal({
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="flex size-[46px] cursor-pointer items-center justify-center rounded-xl bg-neutral-0 transition-colors hover:bg-white"
+              className="flex size-[46px] cursor-pointer items-center justify-center rounded-xl bg-neutral-0 outline-none transition-colors hover:bg-white focus-visible:ring-3 focus-visible:ring-brand-700/25"
               aria-label="Browse your device"
             >
               <Upload className="size-[21px] text-brand-700" strokeWidth={1.8} />
@@ -261,12 +261,12 @@ export function UploadModal({
           {/* PROCESSING PIPELINE (24:534) */}
           <div className="flex w-full flex-col gap-3 rounded-[10px] bg-neutral-50 px-4 py-3.5">
             <p className="type-overline text-neutral-500">PROCESSING PIPELINE</p>
-            <ol className="flex w-full flex-wrap items-start justify-between gap-y-3">
+            <ol className="flex w-full flex-wrap items-start gap-y-3">
               {steps.map((step) => (
                 <li
                   key={step.id}
                   title={step.description}
-                  className="flex flex-col items-center gap-[7px] px-1"
+                  className="flex min-w-[76px] flex-1 flex-col items-center gap-[7px] px-1 text-center"
                 >
                   <span
                     className={cn(
@@ -311,7 +311,7 @@ export function UploadModal({
         </div>
 
         {/* footer (24:564) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl bg-neutral-50 px-6 pt-4 pb-[18px]">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-neutral-200 bg-neutral-50 px-6 pt-4 pb-[18px]">
           <p className="text-[13px] leading-[19px] text-neutral-500">
             Private to your account.
           </p>

@@ -149,13 +149,13 @@ export function DocumentsView() {
       {successMsg && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 rounded-md border border-status-ok-border bg-status-ok-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-status-ok"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-status-ok-border bg-status-ok-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-status-ok"
         >
-          <span>{successMsg}</span>
+          <span className="min-w-0 flex-1">{successMsg}</span>
           <button
             type="button"
             onClick={() => setSuccessMsg(null)}
-            className="text-xs font-semibold text-status-ok underline hover:opacity-80"
+            className="shrink-0 cursor-pointer rounded text-xs font-semibold text-status-ok underline outline-none transition-opacity hover:opacity-80 focus-visible:ring-3 focus-visible:ring-brand-700/25"
           >
             Dismiss
           </button>
@@ -165,9 +165,9 @@ export function DocumentsView() {
       {error && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          <span>{error}</span>
+          <span className="min-w-0 flex-1">{error}</span>
           <Button
             size="sm"
             variant="outline"
@@ -195,22 +195,22 @@ export function DocumentsView() {
           <table className="w-full min-w-[860px] border-collapse text-left">
             <thead>
               <tr className="bg-neutral-50">
-                <th className="type-overline px-[18px] py-3 text-neutral-500">
+                <th className="type-overline px-[18px] py-3 align-middle whitespace-nowrap text-neutral-500">
                   DOCUMENT
                 </th>
-                <th className="type-overline w-[160px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[160px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   TYPE
                 </th>
-                <th className="type-overline w-[140px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[140px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   MEDICAL DATE
                 </th>
-                <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[130px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   UPLOADED
                 </th>
-                <th className="type-overline w-[130px] px-0 py-3 text-neutral-500">
+                <th className="type-overline w-[130px] px-0 py-3 align-middle whitespace-nowrap text-neutral-500">
                   STATUS
                 </th>
-                <th className="type-overline w-[130px] px-3 py-3 text-right text-neutral-500">
+                <th className="type-overline w-[130px] px-3 py-3 text-right align-middle whitespace-nowrap text-neutral-500">
                   ACTIONS
                 </th>
               </tr>
@@ -238,7 +238,7 @@ export function DocumentsView() {
                       onClick={() => router.push(`/documents/${document.id}`)}
                       className="group cursor-pointer border-t border-neutral-200 transition-colors hover:bg-neutral-50"
                     >
-                      <td className="px-[18px] py-[13px]">
+                      <td className="px-[18px] py-[13px] align-middle">
                         <div className="flex items-center gap-3">
                           <span
                             className={`flex size-8 shrink-0 items-center justify-center rounded-md ${failed ? "bg-risk-high-bg" : "bg-neutral-100"
@@ -256,8 +256,8 @@ export function DocumentsView() {
                               />
                             )}
                           </span>
-                          <span className="flex flex-col gap-0.5">
-                            <span className="text-[13px] leading-[18px] font-medium text-neutral-900 group-hover:text-brand-700 group-hover:underline">
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="truncate text-[13px] leading-[18px] font-medium text-neutral-900 transition-colors group-hover:text-brand-700 group-hover:underline">
                               {document.title}
                             </span>
                             <span className="text-xs leading-4 font-medium text-neutral-500">
@@ -266,25 +266,25 @@ export function DocumentsView() {
                           </span>
                         </div>
                       </td>
-                      <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                      <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-600">
                         {failed ? "—" : document.type}
                       </td>
-                      <td className="py-[13px] text-[13px] leading-[19px] text-neutral-600">
+                      <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-600">
                         {document.documentDate}
                       </td>
-                      <td className="py-[13px] text-[13px] leading-[19px] text-neutral-500">
+                      <td className="py-[13px] align-middle text-[13px] leading-[19px] text-neutral-500">
                         {document.uploadedAt}
                       </td>
-                      <td className="py-[13px]">
+                      <td className="py-[13px] align-middle">
                         <StatusPill status={document.status} />
                       </td>
-                      <td className="px-3 py-[13px] text-right">
+                      <td className="px-3 py-[13px] text-right align-middle">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             disabled={isExtracting || document.status === "processing"}
                             onClick={(e) => handleExtract(document.id, e)}
-                            className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-50"
+                            className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md bg-brand-50 px-2.5 text-xs leading-4 font-semibold whitespace-nowrap text-brand-700 outline-none transition-colors hover:bg-brand-100 focus-visible:ring-3 focus-visible:ring-brand-700/25 disabled:pointer-events-none disabled:opacity-50"
                             title="Extract and persist medical structured intelligence with AI"
                             aria-label={`Extract ${document.title} with AI`}
                           >
@@ -305,7 +305,7 @@ export function DocumentsView() {
                             type="button"
                             disabled={isDeleting}
                             onClick={(e) => handleDelete(document.id, e)}
-                            className="inline-flex size-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-risk-high-bg hover:text-risk-high disabled:opacity-50"
+                            className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-neutral-400 outline-none transition-colors hover:bg-risk-high-bg hover:text-risk-high focus-visible:ring-3 focus-visible:ring-brand-700/25 disabled:pointer-events-none disabled:opacity-50"
                             title="Delete document"
                             aria-label={`Delete ${document.title}`}
                           >
@@ -320,30 +320,33 @@ export function DocumentsView() {
               {!loading && rows.length === 0 && (
                 <tr className="border-t border-neutral-200">
                   <td colSpan={6} className="px-[18px] py-12 text-center">
-                    <p className="text-sm leading-[21px] text-neutral-600">
-                      {filter === "all"
-                        ? "No documents uploaded yet. Upload a document to get started."
-                        : "No documents match this filter."}
-                    </p>
-                    {filter !== "all" ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFilter("all");
-                          router.push("/documents");
-                        }}
-                        className="mt-2 cursor-pointer text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
-                      >
-                        Show all documents
-                      </button>
-                    ) : (
-                      <Link
-                        href="/documents/upload"
-                        className="mt-2 inline-block cursor-pointer text-[13px] leading-[18px] font-medium text-brand-700 hover:underline"
-                      >
-                        Upload your first document
-                      </Link>
-                    )}
+                    <div className="mx-auto flex max-w-md flex-col items-center gap-2">
+                      <p className="text-sm leading-[21px] text-neutral-600">
+                        {filter === "all"
+                          ? "No documents uploaded yet. Upload a document to get started."
+                          : "No documents match this filter."}
+                      </p>
+                      {filter !== "all" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilter("all");
+                            router.push("/documents");
+                          }}
+                          className="cursor-pointer rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
+                        >
+                          Show all documents
+                        </button>
+                      ) : (
+                        <Link
+                          href="/documents/upload"
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
+                        >
+                          <Upload className="size-3.5" />
+                          Upload your first document
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}

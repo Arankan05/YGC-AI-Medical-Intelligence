@@ -126,9 +126,9 @@ export function TimelineView() {
       {error && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-risk-high-border bg-risk-high-bg px-3.5 py-2.5 text-[13px] leading-[19px] text-risk-high"
         >
-          <span>{error}</span>
+          <span className="min-w-0 flex-1">{error}</span>
           <Button
             size="sm"
             variant="outline"
@@ -148,7 +148,7 @@ export function TimelineView() {
             <span>Loading chronological timeline...</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-2 py-16 text-center">
             <p className="text-sm leading-5 text-neutral-600">
               {filter === "all"
                 ? "No medical events on your timeline yet. Events will appear here once extracted from your uploaded medical records."
@@ -156,7 +156,7 @@ export function TimelineView() {
             </p>
             <Link
               href="/documents/upload"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-700 hover:underline"
+              className="inline-flex items-center gap-1.5 rounded text-[13px] leading-[18px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-brand-700/25"
             >
               <Upload className="size-3.5" />
               Upload medical documents
@@ -165,7 +165,7 @@ export function TimelineView() {
         ) : (
           <div className="relative flex flex-col gap-6 pl-2">
             {/* Vertical connector line */}
-            <div className="absolute top-4 bottom-4 left-[26px] w-[2px] bg-neutral-200" />
+            <div className="absolute top-4 bottom-4 left-[27px] w-[2px] bg-neutral-200" />
 
             {filtered.map((item) => {
               const style = KIND_STYLES[item.kind] ?? KIND_STYLES.note;
@@ -180,27 +180,27 @@ export function TimelineView() {
                   >
                     <Icon className={cn("size-5", style.ink)} strokeWidth={1.8} />
                   </span>
-                  <div className="flex flex-1 flex-col gap-1 rounded-xl border border-neutral-200 bg-neutral-0 p-4 shadow-card">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-neutral-200 bg-neutral-0 p-4 shadow-card">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="type-overline rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="type-overline inline-flex shrink-0 items-center rounded-full bg-neutral-100 px-2 py-[3px] whitespace-nowrap text-neutral-600">
                           {style.label}
                         </span>
-                        <h3 className="text-sm font-semibold text-neutral-900">
+                        <h3 className="text-sm leading-5 font-semibold text-neutral-900">
                           {item.title}
                         </h3>
                       </div>
-                      <span className="text-xs font-medium text-neutral-500">
+                      <span className="shrink-0 text-xs leading-4 font-medium text-neutral-500">
                         {item.date}
                       </span>
                     </div>
                     {item.summary && (
-                      <p className="text-[13px] leading-[20px] text-neutral-700">
+                      <p className="text-[13px] leading-[19px] text-neutral-700">
                         {item.summary}
                       </p>
                     )}
                     {item.provider && (
-                      <span className="text-xs text-neutral-500">
+                      <span className="text-xs leading-4 text-neutral-500">
                         {item.provider}
                       </span>
                     )}
